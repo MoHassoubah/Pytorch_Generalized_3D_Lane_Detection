@@ -24,6 +24,7 @@ from tqdm import tqdm
 from tensorboardX import SummaryWriter
 from dataloader.Load_Data_3DLane_ext import *
 from networks import Loss_crit, GeoNet3D_ext, erfnet
+from networks.models import compile_model
 from tools.utils import *
 from tools import eval_3D_lane
 
@@ -87,26 +88,133 @@ def train_net():
     valid_set_labels = [json.loads(line) for line in open(val_gt_file).readlines()]
 
     # Define network
-    model1 = erfnet.ERFNet(args.num_class)
-    model2 = GeoNet3D_ext.Net(args, input_dim=args.num_class - 1)
-    define_init_weights(model2, args.weight_init)
+    
+    #####################################
+    #####################################
+    
+    ##############
+    ##############
+    lane_detection = {}
+    
+    lane_detection['y_ref'] = 5.0
+    # # # lane_detection['top_view_region'] = np.array([[-10, 53], [10, 53], [-10, -47], [10, -47]])
+    
+    lane_detection['top_view_region'] = np.array([[-5, 53], [5, 53], [-5, 0], [5, 0]])
+    
+    # # # lane_detection['anchor_y_steps'] = np.array([-45, -40, -35, -30, -20, -10, 0, 10, 30, 50])
+    # lane_detection['anchor_y_steps'] = np.array([0, 10, 30, 50])
+    
+    lane_detection['anchor_y_steps'] = np.array([0,5, 10, 15,20,25,30,35,40, 50])
+    
+    lane_detection['num_y_steps'] = len(lane_detection['anchor_y_steps'])
+    # compute anchor steps
+    x_min = lane_detection['top_view_region'][0, 0]
+    x_max = lane_detection['top_view_region'][1, 0]
+    lane_detection['x_min'] = x_min
+    lane_detection['x_max'] = x_max
+    lane_detection['y_min'] = lane_detection['top_view_region'][2, 1]
+    lane_detection['y_max'] = lane_detection['top_view_region'][1, 1]
+    lane_detection['ipm_w'] = 128
+    lane_detection['n_anchors'] = 4
+    lane_detection['anchor_x_steps'] = np.linspace(x_min, x_max, lane_detection['n_anchors'], endpoint=True) #np.array([0])# #np.int(lane_detection['ipm_w']/8)
+    # lane_detection['num_y_steps'] = len(lane_detection['anchor_y_steps'])
+    lane_detection['anchor_dim'] = lane_detection['num_y_steps']+1
+    
+    lane_detection['ref_id'] = np.argmin(np.abs(lane_detection['anchor_y_steps'] - lane_detection['y_ref'] ))
+    
+    lane_detection['line_names'] = ['road_divider', 'lane_divider']
+    
+    ##############
+    ##############
+    
+    
+    H=900, W=1600,
+    resize_lim=(0.193, 0.225)
+    final_dim=(128, 352)
+    bot_pct_lim=(0.0, 0.22)
+    rot_lim=(-5.4, 5.4)
+    rand_flip=True
+    ncams=1#6
+    max_grad_norm=5.0
+    pos_weight=2.13
+    logdir='./runs'
+    
+    data_aug_conf = {
+                    'resize_lim': resize_lim,
+                    'final_dim': final_dim,
+                    'rot_lim': rot_lim,
+                    'H': H, 'W': W,
+                    'rand_flip': rand_flip,
+                    'bot_pct_lim': bot_pct_lim,
+                    # 'cams': ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
+                             # 'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT'],
+                    'cams': ['CAM_FRONT'],
+                    'Ncams': ncams,
+                }
+    
+    xbound=[-50.0, 50.0, 0.5],
+    ybound=[-50.0, 50.0, 0.5],
 
-    if not args.no_cuda:
-        # Load model on gpu before passing params to optimizer
-        model1 = model1.cuda()
-        model2 = model2.cuda()
+    # xbound=[-5.0, 5.0, 0.5]
+    # ybound=[0.0, 50.0, 0.5]
+    zbound=[-10.0, 10.0, 20.0]
+    dbound=[4.0, 45.0, 1.0]
 
-    # load in vgg pretrained weights
-    checkpoint = torch.load(args.pretrained_feat_model)
-    # args.start_epoch = checkpoint['epoch']
-    model1 = load_my_state_dict(model1, checkpoint['state_dict'])
-    model1.eval()  # do not back propagate to model1
+    grid_conf = {
+        'xbound': xbound,
+        'ybound': ybound,
+        'zbound': zbound,
+        'dbound': dbound,
+    }
+    # data_aug_conf -> final dim
+    # outC needed for the bevEncode-> bevEncode removed
+    # the grid conf is kind of important
+    # num_y_steps defines the size of the the output
+    model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=lane_detection['num_y_steps'])
+    pytorch_total_params = sum(p.numel() for p in model.parameters())
+    #calculate the number of parameters
+    print('total number of parameters>>>', pytorch_total_params)
+    model = model.cuda(gpuid)
+    new_params = model.state_dict().copy()
+    saved_state_dict = torch.load('G:\Hassoubah\lss\models\model525000.pt')
+
+    saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
+    new_params.update(saved_state_dict) 
+    
+    model.load_state_dict(new_params)
+    
+    # weight_decay=1e-7
+    # lr=1e-3
+    args.learning_rate=1e-3
+    args.weight_decay = 1e-7
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    
+    #####################################
+    #####################################
+    
+
+    
+    # model1 = erfnet.ERFNet(args.num_class)
+    # model2 = GeoNet3D_ext.Net(args, input_dim=args.num_class - 1)
+    # define_init_weights(model2, args.weight_init)
+
+    # if not args.no_cuda:
+        # # Load model on gpu before passing params to optimizer
+        # model1 = model1.cuda()
+        # model2 = model2.cuda()
+
+    # # load in vgg pretrained weights
+    # checkpoint = torch.load(args.pretrained_feat_model)
+    # # args.start_epoch = checkpoint['epoch']
+    # model1 = load_my_state_dict(model1, checkpoint['state_dict'])
+    # model1.eval()  # do not back propagate to model1
 
     # Define optimizer and scheduler
-    optimizer = define_optim(args.optimizer, model2.parameters(),
-                             args.learning_rate, args.weight_decay)
-    scheduler = define_scheduler(optimizer, args)
-
+    # optimizer = define_optim(args.optimizer, model2.parameters(),
+                             # args.learning_rate, args.weight_decay)
+    # scheduler = define_scheduler(optimizer, args)
+    
+    
     # Define loss criteria
     if crit_string == 'loss_gflat_3D':
         criterion = Loss_crit.Laneline_loss_gflat_3D(args.batch_size, train_dataset.num_types,
@@ -186,7 +294,7 @@ def train_net():
         print("\n => Start train set for EPOCH {}".format(epoch + 1))
         # Adjust learning rate
         if args.lr_policy is not None and args.lr_policy != 'plateau':
-            scheduler.step()
+            # scheduler.step()
             lr = optimizer.param_groups[0]['lr']
             print('lr is set to {}'.format(lr))
 
@@ -196,7 +304,8 @@ def train_net():
         losses = AverageMeter()
 
         # Specify operation modules
-        model2.train()
+        # model2.train()
+        model.train()
 
         # compute timing
         end = time.time()
@@ -215,27 +324,35 @@ def train_net():
                 gt_pitch = gt_pitch.cuda()
             input = input.contiguous().float()
 
-            if not args.fix_cam and not args.pred_cam:
-                model2.update_projection(args, gt_hcam, gt_pitch)
+            # if not args.fix_cam and not args.pred_cam:
+                # model2.update_projection(args, gt_hcam, gt_pitch)
 
-            # update transformation for data augmentation (only for training)
-            model2.update_projection_for_data_aug(aug_mat)
+            # # update transformation for data augmentation (only for training)
+            # model2.update_projection_for_data_aug(aug_mat)
 
             # Run model
             optimizer.zero_grad()
             # Inference model
             try:
-                output1 = model1(input, no_lane_exist=True)
-                with torch.no_grad():
-                    # output1 = F.softmax(output1, dim=1)
-                    output1 = output1.softmax(dim=1)
-                    output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
+                # output1 = model1(input, no_lane_exist=True)
+                # with torch.no_grad():
+                    # # output1 = F.softmax(output1, dim=1)
+                    # output1 = output1.softmax(dim=1)
+                    # output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
                 # pred = output1.data.cpu().numpy()[0, 1:, :, :]
                 # pred = np.max(pred, axis=0)
                 # cv2.imshow('check probmap', pred)
                 # cv2.waitKey()
-                output1 = output1[:, 1:, :, :]
-                output_net, pred_hcam, pred_pitch = model2(output1)
+                # output1 = output1[:, 1:, :, :]
+                # output_net, pred_hcam, pred_pitch = model2(output1)
+                
+                preds, w_l1, w_ce = model(imgs.to(device),
+                    rots.to(device),
+                    trans.to(device),
+                    intrins.to(device),
+                    post_rots.to(device),
+                    post_trans.to(device),
+                    )
             except RuntimeError as e:
                 print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
                 print(e)
@@ -304,7 +421,7 @@ def train_net():
 
         # Adjust learning_rate if loss plateaued
         if args.lr_policy == 'plateau':
-            scheduler.step(total_score)
+            # scheduler.step(total_score)
             lr = optimizer.param_groups[0]['lr']
             print('LR plateaued, hence is set to {}'.format(lr))
 
@@ -401,7 +518,7 @@ def validate(loader, dataset, model1, model2, criterion, vs_saver, val_gt_file, 
                     lanelines_pred, centerlines_pred, lanelines_prob, centerlines_prob = \
                         compute_3d_lanes_all_prob(lane_anchors, dataset.anchor_dim,
                                                   dataset.anchor_x_steps, args.anchor_y_steps, pred_hcam[j])
-                    json_line["laneLines"] = lanelines_pred
+                    json_line["laneLines"] = lanelines_pred #x,y,z, not offsets
                     json_line["centerLines"] = centerlines_pred
                     json_line["laneLines_prob"] = lanelines_prob
                     json_line["centerLines_prob"] = centerlines_prob
@@ -463,7 +580,7 @@ if __name__ == '__main__':
 
     # dataset_name: 'standard' / 'rare_subset' / 'illus_chg'
     args.dataset_name = 'illus_chg'
-    args.dataset_dir = '/media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
+    args.dataset_dir = './media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
     args.data_dir = ops.join('data_splits', args.dataset_name)
     args.save_path = ops.join('data_splits', args.dataset_name)
 

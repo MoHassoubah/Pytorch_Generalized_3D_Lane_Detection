@@ -277,12 +277,14 @@ class Net(nn.Module):
         cam_pitch = self.cam_pitch
 
         # spatial transfer image features to IPM features
-        grid = self.project_layer(self.M_inv)
+        grid = self.project_layer(self.M_inv)# output is amatirix of indicies
         x_proj = F.grid_sample(input, grid)
 
         # conv layers to convert original resolution binary map to target resolution with high-dimension
         x_feat = self.encoder(x_proj)
-
+        
+        print('x_feat', x_feat.shape)
+        
         # convert top-view features to anchor output
         out = self.lane_out(x_feat)
 

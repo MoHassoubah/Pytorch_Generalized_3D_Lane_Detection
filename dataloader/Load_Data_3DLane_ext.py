@@ -272,7 +272,7 @@ class LaneDataset(Dataset):
         assert ops.exists(json_file_path), '{:s} not exist'.format(json_file_path)
 
         with open(json_file_path, 'r') as file:
-            for line in file:
+            for line in file: # each line in the file is an image
                 info_dict = json.loads(line)
 
                 image_path = ops.join(dataset_base_dir, info_dict['raw_file'])
@@ -280,15 +280,15 @@ class LaneDataset(Dataset):
 
                 label_image_path.append(image_path)
 
-                gt_lane_pts = info_dict['laneLines']
+                gt_lane_pts = info_dict['laneLines'] # lanes in the image
                 gt_lane_visibility = info_dict['laneLines_visibility']
-                for i, lane in enumerate(gt_lane_pts):
+                for i, lane in enumerate(gt_lane_pts): # line by line
                     # A GT lane can be either 2D or 3D
                     # if a GT lane is 3D, the height is intact from 3D GT, so keep it intact here too
                     lane = np.array(lane)
                     gt_lane_pts[i] = lane
                     gt_lane_visibility[i] = np.array(gt_lane_visibility[i])
-                gt_laneline_pts_all.append(gt_lane_pts)
+                gt_laneline_pts_all.append(gt_lane_pts) # append the whole image
                 gt_laneline_visibility_all.append(gt_lane_visibility)
 
                 if not self.no_centerline:
@@ -312,7 +312,7 @@ class LaneDataset(Dataset):
         label_image_path = np.array(label_image_path)
         gt_cam_height_all = np.array(gt_cam_height_all)
         gt_cam_pitch_all = np.array(gt_cam_pitch_all)
-        gt_laneline_pts_all_org = copy.deepcopy(gt_laneline_pts_all)
+        gt_laneline_pts_all_org = copy.deepcopy(gt_laneline_pts_all) # list where each element in the list carries a dict for each image, and each element in the dict carries an np array for the lane
 
         # convert labeled laneline to anchor format
         gt_laneline_ass_ids = []
@@ -445,7 +445,7 @@ class LaneDataset(Dataset):
                 image_path = ops.join(dataset_base_dir, info_dict['raw_file'])
                 assert ops.exists(image_path), '{:s} not exist'.format(image_path)
 
-                label_image_path.append(image_path)
+                label_image_path.append(image_path)# each line is image
 
                 gt_lane_pts_X = info_dict['lanes']
                 gt_y_steps = np.array(info_dict['h_samples'])
@@ -463,8 +463,8 @@ class LaneDataset(Dataset):
                     if lane.shape[0] < 2:
                         continue
 
-                    gt_lane_pts.append(lane)
-                gt_laneline_pts_all.append(gt_lane_pts)
+                    gt_lane_pts.append(lane) #every line is a list of lanes
+                gt_laneline_pts_all.append(gt_lane_pts) #every line
         label_image_path = np.array(label_image_path)
         gt_laneline_pts_all_org = copy.deepcopy(gt_laneline_pts_all)
 
@@ -847,7 +847,7 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         line = np.vstack([x_g, anchor_y_steps, z_g]).T
         # line = line[visibility > prob_th, :]
         # convert to 3D ground space
-        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])
+        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])#<<<<<<<<<<<<<<<<<contribution
         line[:, 0] = x_g
         line[:, 1] = y_g
         line = resample_laneline_in_y_with_vis(line, anchor_y_steps, visibility)

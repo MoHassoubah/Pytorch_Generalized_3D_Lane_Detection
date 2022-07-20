@@ -151,7 +151,7 @@ class LaneEval(object):
             for j in range(cnt_pred):
                 x_dist = np.abs(gt_lanes[i][:, 0] - pred_lanes[j][:, 0])
                 z_dist = np.abs(gt_lanes[i][:, 1] - pred_lanes[j][:, 1])
-                euclidean_dist = np.sqrt(x_dist ** 2 + z_dist ** 2)
+                euclidean_dist = np.sqrt(x_dist ** 2 + z_dist ** 2) #distances between points on the  gt-line and the pred-line
 
                 # apply visibility to penalize different partial matching accordingly
                 euclidean_dist[
@@ -159,7 +159,7 @@ class LaneEval(object):
 
                 # if np.average(euclidean_dist) < 2*self.dist_th: # don't prune here to encourage finding perfect match
                 num_match_mat[i, j] = np.sum(euclidean_dist < self.dist_th)
-                adj_mat[i, j] = 1
+                adj_mat[i, j] = 1 #means that there is a connection between node i and node j
                 # ATTENTION: use the sum as int type to meet the requirements of min cost flow optimization (int type)
                 # using num_match_mat as cost does not work?
                 cost_mat[i, j] = np.sum(euclidean_dist).astype(np.int)

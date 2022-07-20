@@ -55,7 +55,7 @@ def define_args():
     # General model settings
     parser.add_argument('--batch_size', type=int, default=8, help='batch size')
     parser.add_argument('--nepochs', type=int, default=30, help='total numbers of epochs')
-    parser.add_argument('--learning_rate', type=float, default=5*1e-4, help='learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-3, help='learning rate')#original = 5*1e-4
     parser.add_argument('--no_cuda', action='store_true', help='if gpu available')
     parser.add_argument('--nworkers', type=int, default=0, help='num of threads')
     parser.add_argument('--no_dropout', action='store_true', help='no dropout in network')
@@ -71,7 +71,7 @@ def define_args():
     # Optimizer settings
     parser.add_argument('--optimizer', type=str, default='adam', help='adam or sgd')
     parser.add_argument('--weight_init', type=str, default='normal', help='normal, xavier, kaiming, orhtogonal weights initialisation')
-    parser.add_argument('--weight_decay', type=float, default=0, help='L2 weight decay/regularisation on?')
+    parser.add_argument('--weight_decay', type=float, default=1e-7, help='L2 weight decay/regularisation on?')# original = 0
     parser.add_argument('--lr_decay', action='store_true', help='decay learning rate with rule')
     parser.add_argument('--niter', type=int, default=50, help='# of iter at starting learning rate')
     parser.add_argument('--niter_decay', type=int, default=400, help='# of iter to linearly decay learning rate to zero')

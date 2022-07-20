@@ -26,11 +26,21 @@ def SolveMinCostFlow(adj_mat, cost_mat):
     cnt_1, cnt_2 = adj_mat.shape
     cnt_nonzero_row = int(np.sum(np.sum(adj_mat, axis=1) > 0))
     cnt_nonzero_col = int(np.sum(np.sum(adj_mat, axis=0) > 0))
+    
+    '''
+    example cnt_1 = 5, cnt_2 = 5
+    np.repeat(np.array(range(1, cnt_1+1)), cnt_2).tolist()->>>[1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5]
+    np.repeat(np.array([i for i in range(cnt_1+1, cnt_1 + cnt_2 + 1)]).reshape([1, -1]), cnt_1, axis=0).flatten().tolist() ->>>
+    [6, 7, 8, 9, 10, 6, 7, 8, 9, 10, 6, 7, 8, 9, 10, 6, 7, 8, 9, 10, 6, 7, 8, 9, 10]
+    
+    from source 0 go to all nodes in cnt_1
+    from all nodes in cnt_2 go to sink node cnt_1+cnt_2+1
+    '''
 
     # prepare directed graph for the flow
     start_nodes = np.zeros(cnt_1, dtype=np.int).tolist() +\
                   np.repeat(np.array(range(1, cnt_1+1)), cnt_2).tolist() + \
-                  [i for i in range(cnt_1+1, cnt_1 + cnt_2 + 1)]
+                  [i for i in range(cnt_1+1, cnt_1 + cnt_2 + 1)]#->start nodes of the ground truth
     end_nodes = [i for i in range(1, cnt_1+1)] + \
                 np.repeat(np.array([i for i in range(cnt_1+1, cnt_1 + cnt_2 + 1)]).reshape([1, -1]), cnt_1, axis=0).flatten().tolist() + \
                 [cnt_1 + cnt_2 + 1 for i in range(cnt_2)]
