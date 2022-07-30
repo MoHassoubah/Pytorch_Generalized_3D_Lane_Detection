@@ -20,6 +20,12 @@ warnings.simplefilter('ignore', np.RankWarning)
 matplotlib.use('Agg')
 
 
+def get_rot(h):
+    return torch.Tensor([
+        [np.cos(h), np.sin(h)],
+        [-np.sin(h), np.cos(h)],
+    ])
+
 class LaneDataset(Dataset):
     """
     Dataset with labeled lanes
@@ -77,7 +83,8 @@ class LaneDataset(Dataset):
             self.P_g2im = projection_g2im(self.cam_pitch, self.cam_height, args.K)
             self.H_g2im = homograpthy_g2im(self.cam_pitch, self.cam_height, args.K)
             self.H_im2g = np.linalg.inv(self.H_g2im)
-            self.H_im2ipm = np.linalg.inv(np.matmul(self.H_crop, np.matmul(self.H_g2im, self.H_ipm2g)))
+            self.H_im2ipm = np.linalg.inv(np.matmul(self.H_crop, np.matmul(self.H_ipm2g , self.H_g2im)))
+            # self.H_im2ipm = np.linalg.inv(np.matmul(self.H_crop, np.matmul(self.H_g2im, self.H_ipm2g)))
         else:
             self.fix_cam = False
 
@@ -98,7 +105,7 @@ class LaneDataset(Dataset):
         if self.no_3d:
             self.anchor_dim = self.num_y_steps + 1
         else:
-            self.anchor_dim = 3 * args.num_y_steps + 1
+            self.anchor_dim = 2 * args.num_y_steps + 1 #3 * args.num_y_steps + 1
 
         self.y_ref = args.y_ref
         self.ref_id = np.argmin(np.abs(self.num_y_steps - self.y_ref))
@@ -148,6 +155,7 @@ class LaneDataset(Dataset):
         Args: idx (int): Index in list to load image
         """
 
+
         # fetch camera height and pitch
         if not self.fix_cam:
             gt_cam_height = self._label_cam_height_all[idx]
@@ -162,8 +170,11 @@ class LaneDataset(Dataset):
             image = (Image.open(f).convert('RGB'))
 
         # image preprocess with crop and resize
-        image = F.crop(image, self.h_crop, 0, self.h_org-self.h_crop, self.w_org)
+        # img size after crop h_org-h_crop, w_org
+        resize = self.w_net / self.w_org
         image = F.resize(image, size=(self.h_net, self.w_net), interpolation=Image.BILINEAR)
+        image = F.crop(image, int(self.h_crop*resize), 0, int((self.h_org-self.h_crop)*resize), int(self.w_org*resize))
+        
 
         gt_anchor = np.zeros([np.int32(self.ipm_w / 8), self.num_types, self.anchor_dim], dtype=np.float32)
         gt_lanes = self._label_laneline_all[idx]
@@ -178,8 +189,8 @@ class LaneDataset(Dataset):
             # assign anchor tensor values
             gt_anchor[ass_id, 0, 0: self.num_y_steps] = x_off_values
             if not self.no_3d:
-                gt_anchor[ass_id, 0, self.num_y_steps:2*self.num_y_steps] = z_values
-                gt_anchor[ass_id, 0, 2*self.num_y_steps:3*self.num_y_steps] = visibility
+                gt_anchor[ass_id, 0, self.num_y_steps:2*self.num_y_steps] = visibility #z_values
+                # gt_anchor[ass_id, 0, 2*self.num_y_steps:3*self.num_y_steps] = visibility
 
             gt_anchor[ass_id, 0, -1] = 1.0
 
@@ -200,23 +211,60 @@ class LaneDataset(Dataset):
                 if gt_anchor[ass_id, 1, -1] > 0:  # the case one splitting lane has been assigned
                     gt_anchor[ass_id, 2, 0: self.num_y_steps] = x_off_values
                     if not self.no_3d:
-                        gt_anchor[ass_id, 2, self.num_y_steps:2*self.num_y_steps] = z_values
-                        gt_anchor[ass_id, 2, 2*self.num_y_steps:3*self.num_y_steps] = visibility
+                        gt_anchor[ass_id, 2, self.num_y_steps:2*self.num_y_steps] = visibility #z_values
+                        # gt_anchor[ass_id, 2, 2*self.num_y_steps:3*self.num_y_steps] = visibility
                     gt_anchor[ass_id, 2, -1] = 1.0
                 else:
                     gt_anchor[ass_id, 1, 0: self.num_y_steps] = x_off_values
                     if not self.no_3d:
-                        gt_anchor[ass_id, 1, self.num_y_steps:2*self.num_y_steps] = z_values
-                        gt_anchor[ass_id, 1, 2*self.num_y_steps:3*self.num_y_steps] = visibility
+                        gt_anchor[ass_id, 1, self.num_y_steps:2*self.num_y_steps] = visibility #z_values
+                        # gt_anchor[ass_id, 1, 2*self.num_y_steps:3*self.num_y_steps] = visibility
                     gt_anchor[ass_id, 1, -1] = 1.0
 
         if self.data_aug:
-            img_rot, aug_mat = data_aug_rotate(image)
+            img_rot, aug_mat, rot = data_aug_rotate(image)
             image = Image.fromarray(img_rot)
         image = self.totensor(image).float()
-        image = self.normalize(image)
+        # image = self.normalize(image)
+        
+        ##############################
+        post_rot = torch.eye(2)
+        post_tran = torch.zeros(2)
+        post_rot *= resize
+                
+        post_tran -= torch.Tensor([0, int(self.h_crop*resize)])
+        
+        if self.data_aug:
+            A = get_rot(rot)
+        else:
+            A = torch.eye(2)
+            
+        b = torch.Tensor([int(self.w_org*resize), int((self.h_org-self.h_crop)*resize)]) / 2
+        b = A.matmul(-b) + b
+        post_rot = A.matmul(post_rot)
+        post_tran = A.matmul(post_tran) + b
+        
+        # for convenience, make augmentation matrices 3x3
+        post_tran_ret = torch.zeros(3)
+        post_rot_ret = torch.eye(3)
+        post_tran_ret[:2] = post_tran
+        post_rot_ret[:2, :2] = post_rot
+        
+        ##############################
+        
+        
         gt_anchor = gt_anchor.reshape([np.int32(self.ipm_w / 8), -1])
         gt_anchor = torch.from_numpy(gt_anchor)
+        
+        
+        rot_ego2cam = np.array([[1,                             0,                              0],
+                      [0, np.cos(np.pi / 2 + gt_cam_pitch), -np.sin(np.pi / 2 + gt_cam_pitch)],
+                      [0, np.sin(np.pi / 2 + gt_cam_pitch),  np.cos(np.pi / 2 + gt_cam_pitch)]], dtype=np.float32)
+        
+        rot_cam2ego = torch.from_numpy(np.linalg.inv(rot_ego2cam))
+        
+        trans_cam2ego = rot_cam2ego.matmul(torch.from_numpy(np.array([0,-1*gt_cam_height,0], dtype=np.float32)))
+        
         gt_cam_height = torch.tensor(gt_cam_height, dtype=torch.float32)
         gt_cam_pitch = torch.tensor(gt_cam_pitch, dtype=torch.float32)
 
@@ -245,11 +293,14 @@ class LaneDataset(Dataset):
                                      color=np.asscalar(np.array([1])))
         seg_label = torch.from_numpy(seg_label.astype(np.float32))
         seg_label.unsqueeze_(0)
+        
 
         if self.data_aug:
             aug_mat = torch.from_numpy(aug_mat.astype(np.float32))
-            return image, seg_label, gt_anchor, idx, gt_cam_height, gt_cam_pitch, aug_mat
-        return image, seg_label, gt_anchor, idx, gt_cam_height, gt_cam_pitch
+            return torch.stack([image]), seg_label, gt_anchor, idx, gt_cam_height, gt_cam_pitch, aug_mat,\
+            torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]), torch.stack([post_tran_ret])
+        return torch.stack([image]), seg_label, gt_anchor, idx, gt_cam_height, gt_cam_pitch,\
+            torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]), torch.stack([post_tran_ret])
 
     def init_dataset_3D(self, dataset_base_dir, json_file_path):
         """
@@ -700,7 +751,7 @@ def data_aug_rotate(img):
     # img_rot = img.rotate(rot)
     # rot = rot / 180 * np.pi
     rot_mat = np.vstack([rot_mat, [0, 0, 1]])
-    return img_rot, rot_mat
+    return img_rot, rot_mat, rot
 
 
 def get_loader(transformed_dataset, args):

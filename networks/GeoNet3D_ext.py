@@ -280,6 +280,8 @@ class Net(nn.Module):
         grid = self.project_layer(self.M_inv)# output is amatirix of indicies
         x_proj = F.grid_sample(input, grid)
 
+
+        print('x_proj', x_proj.shape)
         # conv layers to convert original resolution binary map to target resolution with high-dimension
         x_feat = self.encoder(x_proj)
         

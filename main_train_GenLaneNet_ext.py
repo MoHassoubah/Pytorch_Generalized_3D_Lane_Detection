@@ -99,14 +99,14 @@ def train_net():
     lane_detection['y_ref'] = 5.0
     # # # lane_detection['top_view_region'] = np.array([[-10, 53], [10, 53], [-10, -47], [10, -47]])
     
-    lane_detection['top_view_region'] = np.array([[-5, 53], [5, 53], [-5, 0], [5, 0]])
+    lane_detection['top_view_region'] = args.top_view_region #np.array([[-5, 53], [5, 53], [-5, 0], [5, 0]])
     
     # # # lane_detection['anchor_y_steps'] = np.array([-45, -40, -35, -30, -20, -10, 0, 10, 30, 50])
     # lane_detection['anchor_y_steps'] = np.array([0, 10, 30, 50])
     
-    lane_detection['anchor_y_steps'] = np.array([0,5, 10, 15,20,25,30,35,40, 50])
+    lane_detection['anchor_y_steps'] = args.anchor_y_steps #np.array([0,5, 10, 15,20,25,30,35,40, 50])
     
-    lane_detection['num_y_steps'] = len(lane_detection['anchor_y_steps'])
+    lane_detection['num_y_steps'] = args.num_y_steps #len(lane_detection['anchor_y_steps'])
     # compute anchor steps
     x_min = lane_detection['top_view_region'][0, 0]
     x_max = lane_detection['top_view_region'][1, 0]
@@ -115,10 +115,10 @@ def train_net():
     lane_detection['y_min'] = lane_detection['top_view_region'][2, 1]
     lane_detection['y_max'] = lane_detection['top_view_region'][1, 1]
     lane_detection['ipm_w'] = 128
-    lane_detection['n_anchors'] = 4
+    lane_detection['n_anchors'] = int(args.ipm_w / 8)
     lane_detection['anchor_x_steps'] = np.linspace(x_min, x_max, lane_detection['n_anchors'], endpoint=True) #np.array([0])# #np.int(lane_detection['ipm_w']/8)
     # lane_detection['num_y_steps'] = len(lane_detection['anchor_y_steps'])
-    lane_detection['anchor_dim'] = lane_detection['num_y_steps']+1
+    # lane_detection['anchor_dim'] = lane_detection['num_y_steps']+1
     
     lane_detection['ref_id'] = np.argmin(np.abs(lane_detection['anchor_y_steps'] - lane_detection['y_ref'] ))
     
@@ -128,9 +128,10 @@ def train_net():
     ##############
     
     
-    H=900, W=1600,
+    H=1080
+    W=1920
     resize_lim=(0.193, 0.225)
-    final_dim=(128, 352)
+    final_dim= (270, 480) #(128, 352)
     bot_pct_lim=(0.0, 0.22)
     rot_lim=(-5.4, 5.4)
     rand_flip=True
@@ -140,20 +141,20 @@ def train_net():
     logdir='./runs'
     
     data_aug_conf = {
-                    'resize_lim': resize_lim,
+                    # 'resize_lim': resize_lim,
                     'final_dim': final_dim,
-                    'rot_lim': rot_lim,
-                    'H': H, 'W': W,
-                    'rand_flip': rand_flip,
-                    'bot_pct_lim': bot_pct_lim,
-                    # 'cams': ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
-                             # 'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT'],
-                    'cams': ['CAM_FRONT'],
-                    'Ncams': ncams,
+                    # 'rot_lim': rot_lim,
+                    # 'H': H, 'W': W,
+                    # 'rand_flip': rand_flip,
+                    # 'bot_pct_lim': bot_pct_lim,
+                    # # 'cams': ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
+                             # # 'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT'],
+                    # 'cams': ['CAM_FRONT'],
+                    # 'Ncams': ncams,
                 }
     
-    xbound=[-50.0, 50.0, 0.5],
-    ybound=[-50.0, 50.0, 0.5],
+    xbound=[-32.0, 32.0, 0.5]
+    ybound=[0.0, 104.0, 0.5]
 
     # xbound=[-5.0, 5.0, 0.5]
     # ybound=[0.0, 50.0, 0.5]
@@ -170,24 +171,24 @@ def train_net():
     # outC needed for the bevEncode-> bevEncode removed
     # the grid conf is kind of important
     # num_y_steps defines the size of the the output
-    model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=lane_detection['num_y_steps'])
+    model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     #calculate the number of parameters
     print('total number of parameters>>>', pytorch_total_params)
-    model = model.cuda(gpuid)
-    new_params = model.state_dict().copy()
-    saved_state_dict = torch.load('G:\Hassoubah\lss\models\model525000.pt')
+    model = model.cuda(0)
+    # new_params = model.state_dict().copy()
+    # saved_state_dict = torch.load('G:\Hassoubah\lss\models\model525000.pt')
 
-    saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
-    new_params.update(saved_state_dict) 
+    # saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
+    # new_params.update(saved_state_dict) 
     
-    model.load_state_dict(new_params)
+    # model.load_state_dict(new_params)
     
     # weight_decay=1e-7
     # lr=1e-3
     args.learning_rate=1e-3
     args.weight_decay = 1e-7
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     
     #####################################
     #####################################
@@ -200,8 +201,8 @@ def train_net():
 
     # if not args.no_cuda:
         # # Load model on gpu before passing params to optimizer
-        # model1 = model1.cuda()
-        # model2 = model2.cuda()
+        # model1 = model1.cuda(0)
+        # model2 = model2.cuda(0)
 
     # # load in vgg pretrained weights
     # checkpoint = torch.load(args.pretrained_feat_model)
@@ -225,7 +226,7 @@ def train_net():
         criterion = Loss_crit.Laneline_loss_gflat(train_dataset.num_types, args.num_y_steps, args.pred_cam)
 
     if not args.no_cuda:
-        criterion = criterion.cuda()
+        criterion = criterion.cuda(0)
 
     # Logging setup
     best_epoch = 0
@@ -287,16 +288,18 @@ def train_net():
     print(40*"="+"\nArgs:{}\n".format(args)+40*"=")
     print("Init model: '{}'".format(args.mod))
     print("Number of parameters in model {} is {:.3f}M".format(
-        args.mod, sum(tensor.numel() for tensor in model2.parameters())/1e6))
+        args.mod, sum(tensor.numel() for tensor in model.parameters())/1e6))
 
     # Start training and validation for nepochs
     for epoch in range(args.start_epoch, args.nepochs):
         print("\n => Start train set for EPOCH {}".format(epoch + 1))
         # Adjust learning rate
-        if args.lr_policy is not None and args.lr_policy != 'plateau':
-            # scheduler.step()
-            lr = optimizer.param_groups[0]['lr']
-            print('lr is set to {}'.format(lr))
+        # if args.lr_policy is not None and args.lr_policy != 'plateau':
+            # # scheduler.step()
+            # lr = optimizer.param_groups[0]['lr']
+            # print('lr is set to {}'.format(lr))
+            
+        np.random.seed()
 
         # Define container objects to keep track of multiple losses/metrics
         batch_time = AverageMeter()
@@ -311,7 +314,7 @@ def train_net():
         end = time.time()
 
         # Start training loop
-        for i, (input, seg_maps, gt, idx, gt_hcam, gt_pitch, aug_mat) in tqdm(enumerate(train_loader)):
+        for i, (input, seg_maps, gt, idx, gt_hcam, gt_pitch, aug_mat,rots, trans, post_rot, post_tran) in tqdm(enumerate(train_loader)):
 
             # Time dataloader
             data_time.update(time.time() - end)
@@ -320,8 +323,12 @@ def train_net():
             if not args.no_cuda:
                 input, gt = input.cuda(non_blocking=True), gt.cuda(non_blocking=True)
                 seg_maps = seg_maps.cuda(non_blocking=True)
-                gt_hcam = gt_hcam.cuda()
-                gt_pitch = gt_pitch.cuda()
+                gt_hcam = gt_hcam.cuda(0)
+                gt_pitch = gt_pitch.cuda(0)
+                rots = rots.cuda(0)
+                trans = trans.cuda(0)
+                post_rot = post_rot.cuda(0)
+                post_tran = post_tran.cuda(0)
             input = input.contiguous().float()
 
             # if not args.fix_cam and not args.pred_cam:
@@ -333,7 +340,7 @@ def train_net():
             # Run model
             optimizer.zero_grad()
             # Inference model
-            try:
+            # try:
                 # output1 = model1(input, no_lane_exist=True)
                 # with torch.no_grad():
                     # # output1 = F.softmax(output1, dim=1)
@@ -346,17 +353,18 @@ def train_net():
                 # output1 = output1[:, 1:, :, :]
                 # output_net, pred_hcam, pred_pitch = model2(output1)
                 
-                preds, w_l1, w_ce = model(imgs.to(device),
-                    rots.to(device),
-                    trans.to(device),
-                    intrins.to(device),
-                    post_rots.to(device),
-                    post_trans.to(device),
-                    )
-            except RuntimeError as e:
-                print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
-                print(e)
-                continue
+            pred_pitch = gt_pitch
+            pred_hcam = gt_hcam
+            output_net, w_l1, w_ce = model(input,
+                rots,
+                trans,
+                post_rot,
+                post_tran,
+                )
+            # except RuntimeError as e:
+                # print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
+                # print(e)
+                # continue
 
             # Compute losses on
             loss = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
@@ -364,7 +372,7 @@ def train_net():
 
             # Clip gradients (usefull for instabilities or mistakes in ground truth)
             if args.clip_grad_norm != 0:
-                nn.utils.clip_grad_norm(model2.parameters(), args.clip_grad_norm)
+                nn.utils.clip_grad_norm(model.parameters(), args.clip_grad_norm)
 
             # Setup backward pass
             loss.backward()
@@ -374,9 +382,9 @@ def train_net():
             batch_time.update(time.time() - end)
             end = time.time()
 
-            pred_pitch = pred_pitch.data.cpu().numpy().flatten()
-            pred_hcam = pred_hcam.data.cpu().numpy().flatten()
-            aug_mat = aug_mat.data.cpu().numpy()
+            # pred_pitch = pred_pitch.data.cpu().numpy().flatten()
+            # pred_hcam = pred_hcam.data.cpu().numpy().flatten()
+            # aug_mat = aug_mat.data.cpu().numpy()
             output_net = output_net.data.cpu().numpy()
             gt = gt.data.cpu().numpy()
 
@@ -399,7 +407,7 @@ def train_net():
                 vs_saver.save_result_new(train_dataset, 'train', epoch, i, idx,
                                          input, gt, output_net, pred_pitch, pred_hcam, aug_mat)
 
-        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model1, model2, criterion, vs_saver, val_gt_file, epoch)
+        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model, criterion, vs_saver, val_gt_file, epoch)
 
         print("===> Average {}-loss on training set is {:.8f}".format(crit_string, losses.avg))
         print("===> Average {}-loss on validation set is {:.8f}".format(crit_string, losses_valid))
@@ -420,10 +428,10 @@ def train_net():
         total_score = losses.avg
 
         # Adjust learning_rate if loss plateaued
-        if args.lr_policy == 'plateau':
-            # scheduler.step(total_score)
-            lr = optimizer.param_groups[0]['lr']
-            print('LR plateaued, hence is set to {}'.format(lr))
+        # if args.lr_policy == 'plateau':
+            # # scheduler.step(total_score)
+            # lr = optimizer.param_groups[0]['lr']
+            # print('LR plateaued, hence is set to {}'.format(lr))
 
         # File to keep latest epoch
         with open(os.path.join(args.save_path, 'first_run.txt'), 'w') as f:
@@ -445,7 +453,7 @@ def train_net():
         writer.close()
 
 
-def validate(loader, dataset, model1, model2, criterion, vs_saver, val_gt_file, epoch=0):
+def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
 
     # Define container to keep track of metric and loss
     losses = AverageMeter()
@@ -458,24 +466,31 @@ def validate(loader, dataset, model1, model2, criterion, vs_saver, val_gt_file, 
     with torch.no_grad():
         with open(lane_pred_file, 'w') as jsonFile:
             # Start validation loop
-            for i, (input, seg_maps, gt, idx, gt_hcam, gt_pitch) in tqdm(enumerate(loader)):
+            for i, (input, seg_maps, gt, idx, gt_hcam, gt_pitch,rots, trans, post_rot, post_tran) in tqdm(enumerate(loader)):
                 if not args.no_cuda:
                     input, gt = input.cuda(non_blocking=True), gt.cuda(non_blocking=True)
                     seg_maps = seg_maps.cuda(non_blocking=True)
-                    gt_hcam = gt_hcam.cuda()
-                    gt_pitch = gt_pitch.cuda()
+                    gt_hcam = gt_hcam.cuda(0)
+                    gt_pitch = gt_pitch.cuda(0)
+                    rots = rots.cuda(0)
+                    trans = trans.cuda(0)
+                    post_rot = post_rot.cuda(0)
+                    post_tran = post_tran.cuda(0)
                 input = input.contiguous().float()
 
-                if not args.fix_cam and not args.pred_cam:
-                    model2.update_projection(args, gt_hcam, gt_pitch)
+                # if not args.fix_cam and not args.pred_cam:
+                    # model2.update_projection(args, gt_hcam, gt_pitch)
                 # Inference model
                 try:
-                    output1 = model1(input, no_lane_exist=True)
-                    # output1 = F.softmax(output1, dim=1)
-                    output1 = output1.softmax(dim=1)
-                    output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
-                    output1 = output1[:, 1:, :, :]
-                    output_net, pred_hcam, pred_pitch = model2(output1)
+                    
+                    pred_pitch = gt_pitch
+                    pred_hcam = gt_hcam
+                    output_net, w_l1, w_ce = model(input,
+                        rots,
+                        trans,
+                        post_rot,
+                        post_tran,
+                        )
                 except RuntimeError as e:
                     print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
                     print(e)

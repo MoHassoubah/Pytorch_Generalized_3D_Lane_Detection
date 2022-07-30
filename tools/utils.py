@@ -24,6 +24,58 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 plt.rcParams['figure.figsize'] = (35, 30)
 
+###########################
+
+def gen_dx_bx(xbound, ybound, zbound):
+    dx = torch.Tensor([row[2] for row in [xbound, ybound, zbound]])
+    bx = torch.Tensor([row[0] + row[2]/2.0 for row in [xbound, ybound, zbound]])
+    nx = torch.LongTensor([(row[1] - row[0]) / row[2] for row in [xbound, ybound, zbound]])
+
+    return dx, bx, nx
+
+
+def cumsum_trick(x, geom_feats, ranks):
+    x = x.cumsum(0)
+    kept = torch.ones(x.shape[0], device=x.device, dtype=torch.bool)
+    kept[:-1] = (ranks[1:] != ranks[:-1]) #remove values repeated after each other and keep the second one of them
+
+    x, geom_feats = x[kept], geom_feats[kept]
+    x = torch.cat((x[:1], x[1:] - x[:-1]))# preserve the features of the removed points but at the same time the elments of x don't share features
+
+    return x, geom_feats
+
+
+class QuickCumsum(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, geom_feats, ranks):
+        x = x.cumsum(0)
+        kept = torch.ones(x.shape[0], device=x.device, dtype=torch.bool)
+        kept[:-1] = (ranks[1:] != ranks[:-1])
+
+        x, geom_feats = x[kept], geom_feats[kept]
+        x = torch.cat((x[:1], x[1:] - x[:-1]))
+
+        # save kept for backward
+        ctx.save_for_backward(kept)
+
+        # no gradient for geom_feats
+        ctx.mark_non_differentiable(geom_feats)
+
+        return x, geom_feats
+
+    @staticmethod
+    def backward(ctx, gradx, gradgeom):
+        kept, = ctx.saved_tensors
+        back = torch.cumsum(kept, 0)
+        back[kept] -= 1
+
+        val = gradx[back]
+
+        return val, None, None
+
+
+
+###########################
 
 def define_args():
     parser = argparse.ArgumentParser(description='Lane_detection_all_objectives')
@@ -48,7 +100,7 @@ def define_args():
     parser.add_argument("--pred_cam", type=str2bool, nargs='?', const=True, default=False, help="use network to predict camera online?")
     parser.add_argument('--ipm_h', type=int, default=208, help='height of inverse projective map (IPM)')
     parser.add_argument('--ipm_w', type=int, default=128, help='width of inverse projective map (IPM)')
-    parser.add_argument('--resize_h', type=int, default=360, help='height of the original image')
+    parser.add_argument('--resize_h', type=int, default=270, help='height of the original image')#old default 360
     parser.add_argument('--resize_w', type=int, default=480, help='width of the original image')
     parser.add_argument('--y_ref', type=float, default=20.0, help='the reference Y distance in meters from where lane association is determined')
     parser.add_argument('--prob_th', type=float, default=0.5, help='probability threshold for selecting output lanes')
@@ -141,7 +193,7 @@ def sim3d_config(args):
     # set camera parameters for the test datasets
     args.K = np.array([[2015., 0., 960.],
                        [0., 2015., 540.],
-                       [0., 0., 1.]])
+                       [0., 0., 1.]], dtype=np.float32)
 
     # specify model settings
     """

@@ -9,7 +9,8 @@ from torch import nn
 from efficientnet_pytorch import EfficientNet
 from torchvision.models.resnet import resnet18
 
-from .tools import gen_dx_bx, cumsum_trick, QuickCumsum
+from tools.utils import gen_dx_bx, cumsum_trick, QuickCumsum
+
 
 def make_layers(cfg, in_channels=3, batch_norm=False):
     layers = []
@@ -183,86 +184,53 @@ class BevEncode(nn.Module):
 #  Lane Prediction Head: through a series of convolutions with no padding in the y dimension, the feature maps are
 #  reduced in height, and finally the prediction layer size is N × 1 × 3 ·(3 · K + 1)
 class LanePredictionHead(nn.Module):
-    def __init__(self, inC, num_lane_type, num_y_steps, batch_norm=False):
+    def __init__(self, num_lane_type, num_y_steps, batch_norm=False):
         super(LanePredictionHead, self).__init__()
-        self.num_lane_type = 1#num_lane_type
+        self.num_lane_type = num_lane_type
         self.num_y_steps = num_y_steps
-        self.anchor_dim = self.num_y_steps + 1
+        self.anchor_dim = 3*self.num_y_steps + 1
         layers = []
-        # layers += make_one_layer(64, 64, kernel_size=2, padding=(0, 0), batch_norm=batch_norm)
-        # layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 0), batch_norm=batch_norm)
-        # layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 0), batch_norm=batch_norm)
-        layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 0), batch_norm=batch_norm)
-
-        # layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 1), batch_norm=batch_norm)
-        # layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
         layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 1), batch_norm=batch_norm)
-        # layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
-        # layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 1), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 1), batch_norm=batch_norm)
+
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
         self.features = nn.Sequential(*layers)
 
-        # x suppose to be N X 256 X 2 X ipm_w/8, need to be reshaped to N X 256 X ipm_w/8 X 1
+        # x suppose to be N X 64 X 4 X ipm_w/8, need to be reshaped to N X 256 X ipm_w/8 X 1
         # TODO: use large kernel_size in x or fc layer to estimate z with global parallelism
         dim_rt_layers = []
-        # dim_rt_layers += make_one_layer(512, 256, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)#256 instead 11,392
-        # dim_rt_layers += make_one_layer(256, 128, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)#256 instead 11,392
-        # dim_rt_layers += make_one_layer(128, 64, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)#256 instead 11,392
-        # dim_rt_layers += make_one_layer(64, 32, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)#256 instead 11,392
-        # dim_rt_layers += [nn.Conv2d(32, self.num_lane_type*self.anchor_dim, kernel_size=(5, 1), padding=(2, 0))]
-        # self.dim_rt = nn.Sequential(*dim_rt_layers)
-        
-        
-        dim_rt_layers += make_one_layer(128, 64, kernel_size=(3, 1), padding=(1, 0), batch_norm=batch_norm)#256 instead 11,392
-        dim_rt_layers += make_one_layer(64, 32, kernel_size=(3, 1), padding=(1, 0), batch_norm=batch_norm)#256 instead 11,392
-        dim_rt_layers += [nn.Conv2d(32, self.num_lane_type*self.anchor_dim, kernel_size=(3, 1), padding=(1, 0))]
+        dim_rt_layers += make_one_layer(256, 128, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)
+        dim_rt_layers += [nn.Conv2d(128, self.num_lane_type*self.anchor_dim, kernel_size=(5, 1), padding=(2, 0))]
         self.dim_rt = nn.Sequential(*dim_rt_layers)
-        
-        
-        
-        # dim_rt_layers_ = []
-        # dim_rt_layers_ += make_one_layer(200, 100, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)#26 instead 11,392
-        # dim_rt_layers_ += [nn.Conv2d(100, 16, kernel_size=(5, 1), padding=(2, 0))]
-        # self.dim_rt_ = nn.Sequential(*dim_rt_layers_)
 
     def forward(self, x):
-        # print('x before features', x.shape)
         x = self.features(x)
-        # print('x features', x.shape)
-        
-        ############
-        
-        # sizes = x.shape
-        # x = x.reshape(sizes[0], sizes[3],sizes[2], sizes[1])
-        # x = self.dim_rt_(x)
-        # sizes = x.shape
-        # x = x.reshape(sizes[0], sizes[3],sizes[2], sizes[1])
-        
-        #######
-        
         # x suppose to be N X 64 X 4 X ipm_w/8, reshape to N X 256 X ipm_w/8 X 1
         sizes = x.shape
         x = x.reshape(sizes[0], sizes[1]*sizes[2], sizes[3], 1)
-        # print(sizes)
-        # print('#################### reached here all good ##############################')
         x = self.dim_rt(x)
         x = x.squeeze(-1).transpose(1, 2)
         # apply sigmoid to the probability terms to make it in (0, 1)
-        # for i in range(self.num_lane_type):
-            # x[:, :, i*self.anchor_dim + self.num_y_steps:(i+1)*self.anchor_dim] = \
-                # torch.sigmoid(x[:, :, i*self.anchor_dim + self.num_y_steps:(i+1)*self.anchor_dim])
+        for i in range(self.num_lane_type):
+            x[:, :, i*self.anchor_dim + 2*self.num_y_steps:(i+1)*self.anchor_dim] = \
+                torch.sigmoid(x[:, :, i*self.anchor_dim + 2*self.num_y_steps:(i+1)*self.anchor_dim])
         return x
 
 
 
 class LiftSplatShoot(nn.Module):
-    def __init__(self, grid_conf, data_aug_conf, outC, num_y_steps):
+    def __init__(self, grid_conf, data_aug_conf, outC, num_y_steps, intrins):
         super(LiftSplatShoot, self).__init__()
         self.grid_conf = grid_conf
         self.data_aug_conf = data_aug_conf
         
         
         self.num_y_steps = num_y_steps 
-        self.num_lane_type = 1
+        self.num_lane_type = 3
         
         # print("self.grid_conf['xbound']", self.grid_conf['xbound'])
         # print("self.grid_conf['ybound']", self.grid_conf['ybound'])
@@ -285,9 +253,12 @@ class LiftSplatShoot(nn.Module):
         self.camencode = CamEncode(self.D, self.camC, self.downsample)
         # self.bevencode = BevEncode(inC=self.camC, outC=outC, num_y_steps = self.num_y_steps)
 
-        self.encoder = make_layers([64, 'M', 64, 'M', 64, 'M', 64,'M', 64,'M', 64,], self.camC, batch_norm=True)
+        # self.encoder = make_layers([64, 'M', 64, 'M', 64, 'M', 64,'M', 64,'M', 64,], self.camC, batch_norm=True)
+        # Conv layers to convert original resolution binary map to target resolution with high-dimension
+        self.encoder = make_layers([64, 'M', 64, 'M', 64, 'M', 64], self.camC, batch_norm=True)
         
-        self.lane_out = LanePredictionHead(32, self.num_lane_type, self.num_y_steps, batch_norm=True)
+        # self.lane_out = LanePredictionHead(32, self.num_lane_type, self.num_y_steps, batch_norm=True)
+        self.lane_out = LanePredictionHead(self.num_lane_type, self.num_y_steps, True)
 
         # toggle using QuickCumsum vs. autograd
         self.use_quickcumsum = True
@@ -295,6 +266,10 @@ class LiftSplatShoot(nn.Module):
         
         self.w_ce = nn.Parameter(torch.tensor([1.0]))###>
         self.w_l1 = nn.Parameter(torch.tensor([1.0]))###>
+        
+        ################################
+    
+        self.intrins = nn.Parameter(torch.from_numpy(intrins), requires_grad=False)
     
     def create_frustum(self):
         # make grid in image plane
@@ -392,8 +367,8 @@ class LiftSplatShoot(nn.Module):
         # print("after cum sum", x.shape)
         # griddify (B x C x Z x X x Y)
         # print("self.nx->voxel_pooling", self.nx)
-        print("x shape", x.shape)
-        print("geom_feats shape", geom_feats.shape)
+        # print("x shape", x.shape)
+        # print("geom_feats shape", geom_feats.shape)
         final = torch.zeros((B, C, self.nx[2], self.nx[0], self.nx[1]), device=x.device)
         final[geom_feats[:, 3], :, geom_feats[:, 2], geom_feats[:, 0], geom_feats[:, 1]] = x
             
@@ -414,12 +389,12 @@ class LiftSplatShoot(nn.Module):
 
         return x
 
-    def forward(self, x, rots, trans, intrins, post_rots, post_trans):
+    def forward(self, x, rot_cam2ego, trans_cam2ego, post_rots, post_trans):
     
-        print("self.nx->forward", self.nx)
-        x = self.get_voxels(x, rots, trans, intrins, post_rots, post_trans)
-        # print('********************* x size before lane pridection')
-        # print(x.shape)
+        # print("self.nx->forward", self.nx)
+        x = self.get_voxels(x, rot_cam2ego, trans_cam2ego, self.intrins, post_rots, post_trans)
+        print('********************* x size before lane pridection')
+        print(x.shape)
         # x = self.bevencode(x)
         x = self.encoder(x)
         # convert top-view features to anchor output
@@ -429,5 +404,5 @@ class LiftSplatShoot(nn.Module):
         return x, self.w_l1, self.w_ce
 
 
-def compile_model(grid_conf, data_aug_conf, outC, num_y_steps):
-    return LiftSplatShoot(grid_conf, data_aug_conf, outC, num_y_steps)
+def compile_model(grid_conf, data_aug_conf, outC, num_y_steps, intrins):
+    return LiftSplatShoot(grid_conf, data_aug_conf, outC, num_y_steps, intrins)

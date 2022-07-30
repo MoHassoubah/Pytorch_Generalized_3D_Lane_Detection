@@ -73,7 +73,7 @@ class Laneline_loss_gflat(nn.Module):
         super(Laneline_loss_gflat, self).__init__()
         self.num_types = num_types
         self.num_y_steps = num_y_steps
-        self.anchor_dim = 3*self.num_y_steps + 1
+        self.anchor_dim = 2*self.num_y_steps + 1 #3*self.num_y_steps + 1
         self.pred_cam = pred_cam
 
     def forward(self, pred_3D_lanes, gt_3D_lanes, pred_hcam, gt_hcam, pred_pitch, gt_pitch):
