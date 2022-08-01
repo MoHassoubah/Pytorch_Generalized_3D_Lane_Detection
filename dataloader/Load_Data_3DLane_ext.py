@@ -337,6 +337,8 @@ class LaneDataset(Dataset):
                     # A GT lane can be either 2D or 3D
                     # if a GT lane is 3D, the height is intact from 3D GT, so keep it intact here too
                     lane = np.array(lane)
+                    # print('lane', lane.shape)
+                    # print('0lane pnts', lane[:4])
                     gt_lane_pts[i] = lane
                     gt_lane_visibility[i] = np.array(gt_lane_visibility[i])
                 gt_laneline_pts_all.append(gt_lane_pts) # append the whole image

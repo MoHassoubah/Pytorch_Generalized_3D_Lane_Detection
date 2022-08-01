@@ -176,13 +176,13 @@ def train_net():
     #calculate the number of parameters
     print('total number of parameters>>>', pytorch_total_params)
     model = model.cuda(0)
-    # new_params = model.state_dict().copy()
-    # saved_state_dict = torch.load('G:\Hassoubah\lss\models\model525000.pt')
+    new_params = model.state_dict().copy()
+    saved_state_dict = torch.load('G:\Hassoubah\lss\models\model525000.pt')
 
-    # saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
-    # new_params.update(saved_state_dict) 
+    saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
+    new_params.update(saved_state_dict) 
     
-    # model.load_state_dict(new_params)
+    model.load_state_dict(new_params)
     
     # weight_decay=1e-7
     # lr=1e-3
@@ -361,6 +361,7 @@ def train_net():
                 post_rot,
                 post_tran,
                 )
+            input = input.squeeze(1)
             # except RuntimeError as e:
                 # print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
                 # print(e)
@@ -382,9 +383,9 @@ def train_net():
             batch_time.update(time.time() - end)
             end = time.time()
 
-            # pred_pitch = pred_pitch.data.cpu().numpy().flatten()
-            # pred_hcam = pred_hcam.data.cpu().numpy().flatten()
-            # aug_mat = aug_mat.data.cpu().numpy()
+            pred_pitch = pred_pitch.data.cpu().numpy().flatten()
+            pred_hcam = pred_hcam.data.cpu().numpy().flatten()
+            aug_mat = aug_mat.data.cpu().numpy()
             output_net = output_net.data.cpu().numpy()
             gt = gt.data.cpu().numpy()
 
@@ -460,7 +461,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
     lane_pred_file = ops.join(args.save_path, 'test_pred_file.json')
 
     # Evaluate model
-    model2.eval()
+    model.eval()
 
     # Only forward pass, hence no gradients needed
     with torch.no_grad():
@@ -481,21 +482,17 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                 # if not args.fix_cam and not args.pred_cam:
                     # model2.update_projection(args, gt_hcam, gt_pitch)
                 # Inference model
-                try:
-                    
-                    pred_pitch = gt_pitch
-                    pred_hcam = gt_hcam
-                    output_net, w_l1, w_ce = model(input,
-                        rots,
-                        trans,
-                        post_rot,
-                        post_tran,
-                        )
-                except RuntimeError as e:
-                    print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
-                    print(e)
-                    continue
+                                    
+                pred_pitch = gt_pitch
+                pred_hcam = gt_hcam
+                output_net, w_l1, w_ce = model(input,
+                    rots,
+                    trans,
+                    post_rot,
+                    post_tran,
+                    )
 
+                input = input.squeeze(1)
                 # Compute losses on parameters or segmentation
                 loss = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
                 losses.update(loss.item(), input.size(0))

@@ -133,7 +133,7 @@ def define_args():
     # CUDNN usage
     parser.add_argument("--cudnn", type=str2bool, nargs='?', const=True, default=True, help="cudnn optimization active")
     # Tensorboard settings
-    parser.add_argument("--no_tb", type=str2bool, nargs='?', const=True, default=False, help="Use tensorboard logging by tensorflow")
+    parser.add_argument("--no_tb", type=str2bool, nargs='?', const=False, default=False, help="Use tensorboard logging by tensorflow")
     # Print settings
     parser.add_argument('--print_freq', type=int, default=500, help='padding')
     parser.add_argument('--save_freq', type=int, default=500, help='padding')

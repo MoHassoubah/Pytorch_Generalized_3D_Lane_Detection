@@ -242,14 +242,14 @@ class LiftSplatShoot(nn.Module):
                                               
         # print("nx", nx)
         
-        self.dx = nn.Parameter(dx, requires_grad=False)
-        self.bx = nn.Parameter(bx, requires_grad=False)
-        self.nx = nn.Parameter(nx, requires_grad=False)      
+        self.dx_ = nn.Parameter(dx, requires_grad=False)
+        self.bx_ = nn.Parameter(bx, requires_grad=False)
+        self.nx_ = nn.Parameter(nx, requires_grad=False)      
 
         self.downsample = 16
         self.camC = 64
-        self.frustum = self.create_frustum()
-        self.D, _, _, _ = self.frustum.shape
+        self.frustum_ = self.create_frustum()
+        self.D, _, _, _ = self.frustum_.shape
         self.camencode = CamEncode(self.D, self.camC, self.downsample)
         # self.bevencode = BevEncode(inC=self.camC, outC=outC, num_y_steps = self.num_y_steps)
 
@@ -297,7 +297,7 @@ class LiftSplatShoot(nn.Module):
         # undo post-transformation
         #I believe he removes the augmentatin
         # B x N x D x H x W x 3
-        points = self.frustum - post_trans.view(B, N, 1, 1, 1, 3)
+        points = self.frustum_ - post_trans.view(B, N, 1, 1, 1, 3)
         points = torch.inverse(post_rots).view(B, N, 1, 1, 1, 3, 3).matmul(points.unsqueeze(-1))
 
         # cam_to_ego
@@ -334,24 +334,27 @@ class LiftSplatShoot(nn.Module):
 
         # flatten indices
         #bound the geom_feats in the bev projected area
-        geom_feats = ((geom_feats - (self.bx - self.dx/2.)) / self.dx).long()
+        geom_feats = ((geom_feats - (self.bx_ - self.dx_/2.)) / self.dx_).long()
         geom_feats = geom_feats.view(Nprime, 3)
         #batch_ix size (Nprime, 3)
         batch_ix = torch.cat([torch.full([Nprime//B, 1], ix,
                              device=x.device, dtype=torch.long) for ix in range(B)])
         geom_feats = torch.cat((geom_feats, batch_ix), 1)
 
+        # print('x before kept', x.shape)
         # filter out points that are outside box
         #seems nx is number of cells in the grid in x,y,z direction
-        kept = (geom_feats[:, 0] >= 0) & (geom_feats[:, 0] < self.nx[0])\
-            & (geom_feats[:, 1] >= 0) & (geom_feats[:, 1] < self.nx[1])\
-            & (geom_feats[:, 2] >= 0) & (geom_feats[:, 2] < self.nx[2])
+        kept = (geom_feats[:, 0] >= 0) & (geom_feats[:, 0] < self.nx_[0])\
+            & (geom_feats[:, 1] >= 0) & (geom_feats[:, 1] < self.nx_[1])\
+            & (geom_feats[:, 2] >= 0) & (geom_feats[:, 2] < self.nx_[2])
         x = x[kept]
         geom_feats = geom_feats[kept]
+        
+        # print('x after kept', x.shape)
 
         # get tensors from the same voxel next to each other
-        ranks = geom_feats[:, 0] * (self.nx[1] * self.nx[2] * B)\
-            + geom_feats[:, 1] * (self.nx[2] * B)\
+        ranks = geom_feats[:, 0] * (self.nx_[1] * self.nx_[2] * B)\
+            + geom_feats[:, 1] * (self.nx_[2] * B)\
             + geom_feats[:, 2] * B\
             + geom_feats[:, 3]
         sorts = ranks.argsort()
@@ -366,11 +369,14 @@ class LiftSplatShoot(nn.Module):
 
         # print("after cum sum", x.shape)
         # griddify (B x C x Z x X x Y)
-        # print("self.nx->voxel_pooling", self.nx)
+        # print("self.nx_->voxel_pooling", self.nx_)
         # print("x shape", x.shape)
         # print("geom_feats shape", geom_feats.shape)
-        final = torch.zeros((B, C, self.nx[2], self.nx[0], self.nx[1]), device=x.device)
-        final[geom_feats[:, 3], :, geom_feats[:, 2], geom_feats[:, 0], geom_feats[:, 1]] = x
+        # final = torch.zeros((B, C, self.nx_[2], self.nx_[0], self.nx_[1]), device=x.device)
+        # final[geom_feats[:, 3], :, geom_feats[:, 2], geom_feats[:, 0], geom_feats[:, 1]] = x
+        
+        final = torch.zeros((B, C, self.nx_[2], self.nx_[1], self.nx_[0]), device=x.device)
+        final[geom_feats[:, 3], :, geom_feats[:, 2], geom_feats[:, 1], geom_feats[:, 0]] = x
             
         # print("final dim before collapse", final.shape)
         
@@ -391,12 +397,13 @@ class LiftSplatShoot(nn.Module):
 
     def forward(self, x, rot_cam2ego, trans_cam2ego, post_rots, post_trans):
     
-        # print("self.nx->forward", self.nx)
+        # print("self.nx_->forward", self.nx_)
         x = self.get_voxels(x, rot_cam2ego, trans_cam2ego, self.intrins, post_rots, post_trans)
-        print('********************* x size before lane pridection')
-        print(x.shape)
+        # print('********************* x size before lane pridection')
+        # print(x.shape)
         # x = self.bevencode(x)
         x = self.encoder(x)
+        # print('x encoder', x.shape)
         # convert top-view features to anchor output
         x = self.lane_out(x)
         # print('final out shape')
