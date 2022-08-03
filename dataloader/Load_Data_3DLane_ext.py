@@ -186,6 +186,8 @@ class LaneDataset(Dataset):
             x_off_values = gt_lanes[i][:, 0]
             z_values = gt_lanes[i][:, 1]
             visibility = gt_vis_inds[i]
+            # if (np.sum(visibility)<1):
+                # print('visibility get item', visibility)
             # assign anchor tensor values
             gt_anchor[ass_id, 0, 0: self.num_y_steps] = x_off_values
             if not self.no_3d:
@@ -873,7 +875,7 @@ def compute_3d_lanes(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_steps, h_
     return lanelines_out, centerlines_out
 
 
-def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_steps, h_cam):
+def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_steps, h_cam, gt_lanes):
     lanelines_out = []
     lanelines_prob = []
     centerlines_out = []
@@ -884,23 +886,31 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
     # consider w/o centerline cases
     pred_anchor[:, anchor_dim - 1] = nms_1d(pred_anchor[:, anchor_dim - 1])
     pred_anchor[:, 2*anchor_dim - 1] = nms_1d(pred_anchor[:, 2*anchor_dim - 1])
-    pred_anchor[:, 3*anchor_dim - 1] = nms_1d(pred_anchor[:, 3*anchor_dim - 1])
+    # pred_anchor[:, 3*anchor_dim - 1] = nms_1d(pred_anchor[:, 3*anchor_dim - 1])
 
     # output only the visible portion of lane
     """
         An important process is output lanes in the considered y-range. Interpolate the visibility attributes to 
         automatically determine whether to extend the lanes.
     """
+    # if(np.sum(gt_lanes[0, num_y_steps:2*num_y_steps]) > 0):
+        # print('gt visibility', gt_lanes[0, num_y_steps:2*num_y_steps])
     for j in range(pred_anchor.shape[0]):
         # draw laneline
         x_offsets = pred_anchor[j, :num_y_steps]
         x_g = x_offsets + anchor_x_steps[j]
-        z_g = pred_anchor[j, num_y_steps:2*num_y_steps]
-        visibility = pred_anchor[j, 2*num_y_steps:3*num_y_steps]
-        line = np.vstack([x_g, anchor_y_steps, z_g]).T
+        visibility = pred_anchor[j, num_y_steps:2*num_y_steps] #z_g
+        
+        # gt_visibility = gt_lanes[0, num_y_steps:2*num_y_steps]
+        # if(np.sum(gt_visibility) > 0):
+            # print('gt visibility', gt_visibility)
+            # print('pred visibility', visibility)
+        # visibility = pred_anchor[j, 2*num_y_steps:3*num_y_steps]
+        # line = np.vstack([x_g, anchor_y_steps, z_g]).T
+        line = np.vstack([x_g, anchor_y_steps]).T
         # line = line[visibility > prob_th, :]
         # convert to 3D ground space
-        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])#<<<<<<<<<<<<<<<<<contribution
+        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], np.zeros_like(line[:, 0]))#<<<<<<<<<<<<<<<<<contribution
         line[:, 0] = x_g
         line[:, 1] = y_g
         line = resample_laneline_in_y_with_vis(line, anchor_y_steps, visibility)
@@ -911,12 +921,13 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         # draw centerline
         x_offsets = pred_anchor[j, anchor_dim:anchor_dim + num_y_steps]
         x_g = x_offsets + anchor_x_steps[j]
-        z_g = pred_anchor[j, anchor_dim + num_y_steps:anchor_dim + 2*num_y_steps]
-        visibility = pred_anchor[j, anchor_dim + 2*num_y_steps:anchor_dim + 3*num_y_steps]
-        line = np.vstack([x_g, anchor_y_steps, z_g]).T
+        visibility = pred_anchor[j, anchor_dim + num_y_steps:anchor_dim + 2*num_y_steps] #z_g
+        # visibility = pred_anchor[j, anchor_dim + 2*num_y_steps:anchor_dim + 3*num_y_steps]
+        # line = np.vstack([x_g, anchor_y_steps, z_g]).T
+        line = np.vstack([x_g, anchor_y_steps]).T
         # line = line[visibility > prob_th, :]
         # convert to 3D ground space
-        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])
+        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1],np.zeros_like(line[:, 0]))# line[:, 2])
         line[:, 0] = x_g
         line[:, 1] = y_g
         line = resample_laneline_in_y_with_vis(line, anchor_y_steps, visibility)
@@ -927,8 +938,8 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         # draw the additional centerline for the merging case
         x_offsets = pred_anchor[j, 2*anchor_dim:2*anchor_dim + num_y_steps]
         x_g = x_offsets + anchor_x_steps[j]
-        z_g = pred_anchor[j, 2*anchor_dim + num_y_steps:2*anchor_dim + 2*num_y_steps]
-        visibility = pred_anchor[j, 2*anchor_dim + 2*num_y_steps:2*anchor_dim + 3*num_y_steps]
+        z_g = np.zeros_like(x_g)#pred_anchor[j, 2*anchor_dim + num_y_steps:2*anchor_dim + 2*num_y_steps]
+        visibility = pred_anchor[j, 2*anchor_dim + num_y_steps:2*anchor_dim + 2*num_y_steps] #pred_anchor[j, 2*anchor_dim + 2*num_y_steps:2*anchor_dim + 3*num_y_steps]
         line = np.vstack([x_g, anchor_y_steps, z_g]).T
         # line = line[visibility > prob_th, :]
         # convert to 3D ground space
@@ -949,9 +960,9 @@ def unormalize_lane_anchor(anchor, dataset):
     for i in range(dataset.num_types):
         anchor[:, i*anchor_dim:i*anchor_dim + num_y_steps] = \
             np.multiply(anchor[:, i*anchor_dim: i*anchor_dim + num_y_steps], dataset._x_off_std)
-        if not dataset.no_3d:
-            anchor[:, i*anchor_dim + num_y_steps: i*anchor_dim + 2*num_y_steps] = \
-                np.multiply(anchor[:, i*anchor_dim + num_y_steps: i*anchor_dim + 2*num_y_steps], dataset._z_std)
+        # if not dataset.no_3d:
+            # anchor[:, i*anchor_dim + num_y_steps: i*anchor_dim + 2*num_y_steps] = \
+                # np.multiply(anchor[:, i*anchor_dim + num_y_steps: i*anchor_dim + 2*num_y_steps], dataset._z_std)
 
 
 # unit testR

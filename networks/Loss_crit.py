@@ -93,28 +93,62 @@ class Laneline_loss_gflat(nn.Module):
         gt_3D_lanes = gt_3D_lanes.reshape(sizes[0], sizes[1], self.num_types, self.anchor_dim)
         # class prob N x ipm_w/8 x 3 x 1, anchor value N x ipm_w/8 x 3 x 2K
         pred_class = pred_3D_lanes[:, :, :, -1].unsqueeze(-1)
-        pred_anchors = pred_3D_lanes[:, :, :, :2*self.num_y_steps]
-        pred_visibility = pred_3D_lanes[:, :, :, 2*self.num_y_steps:3*self.num_y_steps]
+        pred_anchors = pred_3D_lanes[:, :, :, :self.num_y_steps] #pred_3D_lanes[:, :, :, :2*self.num_y_steps]
+        pred_visibility = pred_3D_lanes[:, :, :, self.num_y_steps:2*self.num_y_steps] #pred_3D_lanes[:, :, :, 2*self.num_y_steps:3*self.num_y_steps]
+        
+        # print('pred_anchors',pred_anchors.shape)
+        # print('pred_visibility',pred_visibility.shape)
+        
         gt_class = gt_3D_lanes[:, :, :, -1].unsqueeze(-1)
-        gt_anchors = gt_3D_lanes[:, :, :, :2*self.num_y_steps]
-        gt_visibility = gt_3D_lanes[:, :, :, 2*self.num_y_steps:3*self.num_y_steps]
+        gt_anchors = gt_3D_lanes[:, :, :, :self.num_y_steps] #gt_3D_lanes[:, :, :, :2*self.num_y_steps]
+        gt_visibility = gt_3D_lanes[:, :, :, self.num_y_steps:2*self.num_y_steps] #gt_3D_lanes[:, :, :, 2*self.num_y_steps:3*self.num_y_steps]
+
+        # if torch.sum(gt_visibility[0,0,0])>0:
+            # print('gt vis loss', gt_visibility[0,0,0])
+            # print('pred vis loss', pred_visibility[0,0,0])
+        # print('pred_3D_lanes',pred_3D_lanes.shape)
+        # print('gt_3D_lanes',gt_3D_lanes.shape)
+        
+        # print('gt_anchors',gt_anchors.shape)
+        # print('gt_visibility',gt_visibility.shape)
 
         # cross-entropy loss for visibility
         loss0 = -torch.sum(
             gt_visibility*torch.log(pred_visibility + torch.tensor(1e-9)) +
             (torch.ones_like(gt_visibility) - gt_visibility + torch.tensor(1e-9)) *
             torch.log(torch.ones_like(pred_visibility) - pred_visibility + torch.tensor(1e-9)))/self.num_y_steps
+            
+        # print('1st elm', -torch.sum(
+            # gt_visibility*torch.log(pred_visibility + torch.tensor(1e-9))).item())
+        # print('2nd elm', torch.sum((torch.ones_like(gt_visibility) - gt_visibility + torch.tensor(1e-9)) *
+            # torch.log(torch.ones_like(pred_visibility) - pred_visibility + torch.tensor(1e-9))).item())
+        
+        # print('gt vis sum', torch.sum(gt_visibility))
+        # print('pred vis sum', torch.sum(pred_visibility))
+            
+        # print('loss0',loss0.item())
         # cross-entropy loss for lane probability
         loss1 = -torch.sum(
             gt_class*torch.log(pred_class + torch.tensor(1e-9)) +
             (torch.ones_like(gt_class)-gt_class) *
             torch.log(torch.ones_like(pred_class) - pred_class + torch.tensor(1e-9)))
+            
+        
+        # print('loss1',loss1.item())
+        
         # applying L1 norm does not need to separate X and Z
-        loss2 = torch.sum(torch.norm(gt_class*torch.cat((gt_visibility, gt_visibility), 3) *
+        # loss2 = torch.sum(torch.norm(gt_class*torch.cat((gt_visibility, gt_visibility), 3) *
+                                     # (pred_anchors-gt_anchors), p=1, dim=3))
+        loss2 = torch.sum(torch.norm(gt_class*gt_visibility *
                                      (pred_anchors-gt_anchors), p=1, dim=3))
+                                     
+        # print('loss2',loss2.item())
+        
         if not self.pred_cam:
             return loss0+loss1+loss2
-        loss3 = torch.sum(torch.abs(gt_pitch-pred_pitch))+torch.sum(torch.abs(gt_hcam-pred_hcam))
+        loss3 = torch.sum(torch.abs(gt_pitch-pred_pitch))#+torch.sum(torch.abs(gt_hcam-pred_hcam))
+        
+        # print('loss3',loss3.item())
         return loss0+loss1+loss2+loss3
 
 

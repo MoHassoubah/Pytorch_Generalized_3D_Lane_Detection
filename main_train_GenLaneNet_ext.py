@@ -242,47 +242,47 @@ def train_net():
     vs_saver = Visualizer(args)
 
     # Train, evaluate or resume
-    args.resume = first_run(args.save_path)
-    if args.resume and not args.test_mode and not args.evaluate:
-        path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
-            int(args.resume)))
-        if os.path.isfile(path):
-            log_file_name = 'log_train_start_{}.txt'.format(args.resume)
-            # Redirect stdout
-            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(path)
-            args.start_epoch = checkpoint['epoch']
-            lowest_loss = checkpoint['loss']
-            best_epoch = checkpoint['best epoch']
-            model2.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-        else:
-            log_file_name = 'log_train_start_0.txt'
-            # Redirect stdout
-            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            print("=> no checkpoint found at '{}'".format(path))
+    # args.resume = first_run(args.save_path)
+    # if args.resume and not args.test_mode and not args.evaluate:
+        # path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
+            # int(args.resume)))
+        # if os.path.isfile(path):
+            # log_file_name = 'log_train_start_{}.txt'.format(args.resume)
+            # # Redirect stdout
+            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            # print("=> loading checkpoint '{}'".format(args.resume))
+            # checkpoint = torch.load(path)
+            # args.start_epoch = checkpoint['epoch']
+            # lowest_loss = checkpoint['loss']
+            # best_epoch = checkpoint['best epoch']
+            # model2.load_state_dict(checkpoint['state_dict'])
+            # optimizer.load_state_dict(checkpoint['optimizer'])
+            # print("=> loaded checkpoint '{}' (epoch {})"
+                  # .format(args.resume, checkpoint['epoch']))
+        # else:
+            # log_file_name = 'log_train_start_0.txt'
+            # # Redirect stdout
+            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            # print("=> no checkpoint found at '{}'".format(path))
 
-    # Only evaluate
-    elif args.evaluate:
-        best_file_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
-        if os.path.isfile(best_file_name):
-            sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
-            print("=> loading checkpoint '{}'".format(best_file_name))
-            checkpoint = torch.load(best_file_name)
-            model2.load_state_dict(checkpoint['state_dict'])
-        else:
-            print("=> no checkpoint found at '{}'".format(best_file_name))
-        mkdir_if_missing(os.path.join(args.save_path, 'example/val_vis'))
-        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model1, model2, criterion, vs_saver, val_gt_file)
-        return
+    # # Only evaluate
+    # elif args.evaluate:
+        # best_file_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
+        # if os.path.isfile(best_file_name):
+            # sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
+            # print("=> loading checkpoint '{}'".format(best_file_name))
+            # checkpoint = torch.load(best_file_name)
+            # model2.load_state_dict(checkpoint['state_dict'])
+        # else:
+            # print("=> no checkpoint found at '{}'".format(best_file_name))
+        # mkdir_if_missing(os.path.join(args.save_path, 'example/val_vis'))
+        # losses_valid, eval_stats = validate(valid_loader, valid_dataset, model1, model2, criterion, vs_saver, val_gt_file)
+        # return
 
-    # Start training from clean slate
-    else:
-        # Redirect stdout
-        sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+    # # Start training from clean slate
+    # else:
+        # # Redirect stdout
+    sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
 
     # INIT MODEL
     print(40*"="+"\nArgs:{}\n".format(args)+40*"=")
@@ -447,7 +447,7 @@ def train_net():
             'epoch': epoch + 1,
             'best epoch': best_epoch,
             'arch': args.mod,
-            'state_dict': model2.state_dict(),
+            'state_dict': model.state_dict(),
             'loss': lowest_loss,
             'optimizer': optimizer.state_dict()}, to_save, epoch)
     if not args.no_tb:
@@ -494,19 +494,32 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
 
                 input = input.squeeze(1)
                 # Compute losses on parameters or segmentation
+                # print('################################### VAP(DATION#####################################')
                 loss = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
                 losses.update(loss.item(), input.size(0))
+                
+                
 
                 pred_pitch = pred_pitch.data.cpu().numpy().flatten()
                 pred_hcam = pred_hcam.data.cpu().numpy().flatten()
                 output_net = output_net.data.cpu().numpy()
+                
+                
+                # if(torch.sum(gt[0,0, args.anchor_y_steps.shape[0]:2*args.anchor_y_steps.shape[0]]) > 0):
+                    # print('gt visibility outt before', gt[0,0, args.anchor_y_steps.shape[0]:2*args.anchor_y_steps.shape[0]])
+                
                 gt = gt.data.cpu().numpy()
+                
+                
 
                 # unormalize lane outputs
                 num_el = input.size(0)
                 for j in range(num_el):
                     unormalize_lane_anchor(output_net[j], dataset)
                     unormalize_lane_anchor(gt[j], dataset)
+                    
+                # if(np.sum(gt[0,0, args.anchor_y_steps.shape[0]:2*args.anchor_y_steps.shape[0]]) > 0):
+                    # print('gt visibility outt after', gt[0,0, args.anchor_y_steps.shape[0]:2*args.anchor_y_steps.shape[0]])
 
                 # Print info
                 if (i + 1) % args.print_freq == 0:
@@ -518,18 +531,24 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                 if (i + 1) % args.save_freq == 0 or args.evaluate:
                     vs_saver.save_result_new(dataset, 'valid', epoch, i, idx,
                                              input, gt, output_net, pred_pitch, pred_hcam, evaluate=args.evaluate)
+                                             
+                
 
+                
+                                
                 # write results and evaluate
                 for j in range(num_el):
                     im_id = idx[j]
                     H_g2im, P_g2im, H_crop, H_im2ipm = dataset.transform_mats(idx[j])
                     json_line = valid_set_labels[im_id]
                     lane_anchors = output_net[j]
+                    gt_lane_anchors = gt[0]
                     # convert to json output format
                     # P_g2gflat = np.matmul(np.linalg.inv(H_g2im), P_g2im)
                     lanelines_pred, centerlines_pred, lanelines_prob, centerlines_prob = \
                         compute_3d_lanes_all_prob(lane_anchors, dataset.anchor_dim,
-                                                  dataset.anchor_x_steps, args.anchor_y_steps, pred_hcam[j])
+                                                  dataset.anchor_x_steps, args.anchor_y_steps, pred_hcam[j],gt_lane_anchors)
+                    # print('lanelines_pred', len(lanelines_pred))
                     json_line["laneLines"] = lanelines_pred #x,y,z, not offsets
                     json_line["centerLines"] = centerlines_pred
                     json_line["laneLines_prob"] = lanelines_prob

@@ -188,7 +188,7 @@ class LanePredictionHead(nn.Module):
         super(LanePredictionHead, self).__init__()
         self.num_lane_type = num_lane_type
         self.num_y_steps = num_y_steps
-        self.anchor_dim = 3*self.num_y_steps + 1
+        self.anchor_dim = 2*self.num_y_steps + 1
         layers = []
         layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 1), batch_norm=batch_norm)
         layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 1), batch_norm=batch_norm)
@@ -216,8 +216,8 @@ class LanePredictionHead(nn.Module):
         x = x.squeeze(-1).transpose(1, 2)
         # apply sigmoid to the probability terms to make it in (0, 1)
         for i in range(self.num_lane_type):
-            x[:, :, i*self.anchor_dim + 2*self.num_y_steps:(i+1)*self.anchor_dim] = \
-                torch.sigmoid(x[:, :, i*self.anchor_dim + 2*self.num_y_steps:(i+1)*self.anchor_dim])
+            x[:, :, i*self.anchor_dim + self.num_y_steps:(i+1)*self.anchor_dim] = \
+                torch.sigmoid(x[:, :, i*self.anchor_dim + self.num_y_steps:(i+1)*self.anchor_dim])
         return x
 
 

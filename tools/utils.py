@@ -266,9 +266,9 @@ class Visualizer:
                 x_3d = x_offsets + self.anchor_x_steps[j]
                 if P_g2im.shape[1] is 3:
                     x_2d, y_2d = homographic_transformation(P_g2im, x_3d, self.anchor_y_steps)
-                else:
-                    z_3d = lane_anchor[j, self.num_y_steps:self.anchor_dim - 1]
-                    x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
+                # else:
+                    # z_3d = lane_anchor[j, self.num_y_steps:self.anchor_dim - 1]
+                    # x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
                 x_2d = x_2d.astype(np.int)
                 y_2d = y_2d.astype(np.int)
                 for k in range(1, x_2d.shape[0]):
@@ -280,23 +280,23 @@ class Visualizer:
                 x_3d = x_offsets + self.anchor_x_steps[j]
                 if P_g2im.shape[1] is 3:
                     x_2d, y_2d = homographic_transformation(P_g2im, x_3d, self.anchor_y_steps)
-                else:
-                    z_3d = lane_anchor[j, self.anchor_dim + self.num_y_steps:2 * self.anchor_dim - 1]
-                    x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
+                # else:
+                    # z_3d = lane_anchor[j, self.anchor_dim + self.num_y_steps:2 * self.anchor_dim - 1]
+                    # x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
                 x_2d = x_2d.astype(np.int)
                 y_2d = y_2d.astype(np.int)
                 for k in range(1, x_2d.shape[0]):
                     img = cv2.line(img, (x_2d[k - 1], y_2d[k - 1]), (x_2d[k], y_2d[k]), color, 2)
 
             # draw the additional centerline for the merging case
-            if draw_type is 'centerline' and lane_anchor[j, 3 * self.anchor_dim - 1] > self.prob_th:
-                x_offsets = lane_anchor[j, 2 * self.anchor_dim:2 * self.anchor_dim + self.num_y_steps]
+            if draw_type is 'centerline' and lane_anchor[j, 2 * self.anchor_dim - 1] > self.prob_th: #2 * self.anchor_dim
+                x_offsets = lane_anchor[j,  self.anchor_dim: self.anchor_dim + self.num_y_steps] #2 * self.anchor_dim:2 * self.anchor_dim
                 x_3d = x_offsets + self.anchor_x_steps[j]
                 if P_g2im.shape[1] is 3:
                     x_2d, y_2d = homographic_transformation(P_g2im, x_3d, self.anchor_y_steps)
-                else:
-                    z_3d = lane_anchor[j, 2 * self.anchor_dim + self.num_y_steps:3 * self.anchor_dim - 1]
-                    x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
+                # else:
+                    # z_3d = lane_anchor[j, 2 * self.anchor_dim + self.num_y_steps:3 * self.anchor_dim - 1]
+                    # x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
                 x_2d = x_2d.astype(np.int)
                 y_2d = y_2d.astype(np.int)
                 for k in range(1, x_2d.shape[0]):
@@ -320,10 +320,10 @@ class Visualizer:
                 if P_g2im.shape[1] is 3:
                     x_2d, y_2d = homographic_transformation(P_g2im, x_3d, self.anchor_y_steps)
                     visibility = np.ones_like(x_2d)
-                else:
-                    z_3d = lane_anchor[j, self.num_y_steps:2*self.num_y_steps]
-                    x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
-                    visibility = lane_anchor[j, 2 * self.num_y_steps:3 * self.num_y_steps]
+                # else:
+                    # z_3d = lane_anchor[j, self.num_y_steps:2*self.num_y_steps]
+                    # x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
+                    # visibility = lane_anchor[j, 2 * self.num_y_steps:3 * self.num_y_steps]
                 x_2d = x_2d.astype(np.int)
                 y_2d = y_2d.astype(np.int)
                 for k in range(1, x_2d.shape[0]):
@@ -339,10 +339,10 @@ class Visualizer:
                 if P_g2im.shape[1] is 3:
                     x_2d, y_2d = homographic_transformation(P_g2im, x_3d, self.anchor_y_steps)
                     visibility = np.ones_like(x_2d)
-                else:
-                    z_3d = lane_anchor[j, self.anchor_dim + self.num_y_steps:self.anchor_dim + 2*self.num_y_steps]
-                    x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
-                    visibility = lane_anchor[j, self.anchor_dim + 2*self.num_y_steps:self.anchor_dim + 3*self.num_y_steps]
+                # else:
+                    # z_3d = lane_anchor[j, self.anchor_dim + self.num_y_steps:self.anchor_dim + 2*self.num_y_steps]
+                    # x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
+                    # visibility = lane_anchor[j, self.anchor_dim + 2*self.num_y_steps:self.anchor_dim + 3*self.num_y_steps]
                 x_2d = x_2d.astype(np.int)
                 y_2d = y_2d.astype(np.int)
                 for k in range(1, x_2d.shape[0]):
@@ -352,17 +352,16 @@ class Visualizer:
                         img = cv2.line(img, (x_2d[k - 1], y_2d[k - 1]), (x_2d[k], y_2d[k]), [0, 0, 0], 2)
 
             # draw the additional centerline for the merging case
-            if draw_type is 'centerline' and lane_anchor[j, 3*self.anchor_dim - 1] > self.prob_th:
-                x_offsets = lane_anchor[j, 2*self.anchor_dim:2*self.anchor_dim + self.num_y_steps]
+            if draw_type is 'centerline' and lane_anchor[j, 2*self.anchor_dim - 1] > self.prob_th: #3*self.anchor_dim
+                x_offsets = lane_anchor[j, self.anchor_dim:self.anchor_dim + self.num_y_steps] #2*self.anchor_dim:2*self.anchor_dim
                 x_3d = x_offsets + self.anchor_x_steps[j]
                 if P_g2im.shape[1] is 3:
                     x_2d, y_2d = homographic_transformation(P_g2im, x_3d, self.anchor_y_steps)
                     visibility = np.ones_like(x_2d)
-                else:
-                    z_3d = lane_anchor[j, 2*self.anchor_dim + self.num_y_steps:2*self.anchor_dim + 2*self.num_y_steps]
-                    x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
-                    visibility = lane_anchor[j,
-                                 2 * self.anchor_dim + 2 * self.num_y_steps:2 * self.anchor_dim + 3 * self.num_y_steps]
+                # else:
+                    # z_3d = lane_anchor[j, 2*self.anchor_dim + self.num_y_steps:2*self.anchor_dim + 2*self.num_y_steps]
+                    # x_2d, y_2d = projective_transformation(P_g2im, x_3d, self.anchor_y_steps, z_3d)
+                    # visibility = lane_anchor[j,2 * self.anchor_dim + 2 * self.num_y_steps:2 * self.anchor_dim + 3 * self.num_y_steps]
                 x_2d = x_2d.astype(np.int)
                 y_2d = y_2d.astype(np.int)
                 for k in range(1, x_2d.shape[0]):
@@ -401,8 +400,8 @@ class Visualizer:
                                       (x_ipm[k], y_ipm[k]), color, 1)
 
             # draw the additional centerline for the merging case
-            if draw_type is 'centerline' and lane_anchor[j, 3 * self.anchor_dim - 1] > self.prob_th:
-                x_offsets = lane_anchor[j, 2 * self.anchor_dim:2 * self.anchor_dim + self.num_y_steps]
+            if draw_type is 'centerline' and lane_anchor[j, 2 * self.anchor_dim - 1] > self.prob_th: #3 * self.anchor_dim
+                x_offsets = lane_anchor[j, self.anchor_dim:self.anchor_dim + self.num_y_steps] #2*self.anchor_dim:2*self.anchor_dim 
                 x_g = x_offsets + self.anchor_x_steps[j]
 
                 # compute lanelines in ipm view
@@ -423,7 +422,7 @@ class Visualizer:
                 if self.no_3d:
                     visibility = np.ones_like(x_g)
                 else:
-                    visibility = lane_anchor[j, 2*self.num_y_steps:3*self.num_y_steps]
+                    visibility = lane_anchor[j, self.num_y_steps:2*self.num_y_steps] #2*self.num_y_steps:3*self.num_y_steps
 
                 # compute lanelines in ipm view
                 x_ipm, y_ipm = homographic_transformation(self.H_g2ipm, x_g, self.anchor_y_steps)
@@ -459,13 +458,13 @@ class Visualizer:
                                           (x_ipm[k], y_ipm[k]), [0, 0, 0], width)
 
             # draw the additional centerline for the merging case
-            if draw_type is 'centerline' and lane_anchor[j, 3*self.anchor_dim - 1] > self.prob_th:
-                x_offsets = lane_anchor[j, 2*self.anchor_dim:2*self.anchor_dim + self.num_y_steps]
+            if draw_type is 'centerline' and lane_anchor[j, 2*self.anchor_dim - 1] > self.prob_th: #3*self.anchor_dim
+                x_offsets = lane_anchor[j, self.anchor_dim:self.anchor_dim + self.num_y_steps] #2*self.anchor_dim:2*self.anchor_dim + self.num_y_steps
                 x_g = x_offsets + self.anchor_x_steps[j]
                 if self.no_3d:
                     visibility = np.ones_like(x_g)
                 else:
-                    visibility = lane_anchor[j, 2*self.anchor_dim + 2*self.num_y_steps:2*self.anchor_dim + 3*self.num_y_steps]
+                    visibility = lane_anchor[j, self.anchor_dim + self.num_y_steps:2*self.anchor_dim + 2*self.num_y_steps] #2*self.anchor_dim + 2*self.num_y_steps:2*self.anchor_dim + 3*self.num_y_steps
 
                 # compute lanelines in ipm view
                 x_ipm, y_ipm = homographic_transformation(self.H_g2ipm, x_g, self.anchor_y_steps)
@@ -503,13 +502,13 @@ class Visualizer:
                 ax.plot(x_g, self.anchor_y_steps, z_g, color=color)
 
             # draw the additional centerline for the merging case
-            if draw_type is 'centerline' and lane_anchor[j, 3*self.anchor_dim - 1] > self.prob_th:
-                x_offsets = lane_anchor[j, 2*self.anchor_dim:2*self.anchor_dim + self.num_y_steps]
+            if draw_type is 'centerline' and lane_anchor[j, 2*self.anchor_dim - 1] > self.prob_th: #3*self.anchor_dim
+                x_offsets = lane_anchor[j, self.anchor_dim:self.anchor_dim + self.num_y_steps] #2*self.anchor_dim:2*self.anchor_dim + self.num_y_steps
                 x_g = x_offsets + self.anchor_x_steps[j]
                 if self.no_3d:
                     z_g = np.zeros_like(x_g)
-                else:
-                    z_g = lane_anchor[j, 2*self.anchor_dim + self.num_y_steps:2*self.anchor_dim + 2*self.num_y_steps]
+                # else:
+                    # z_g = lane_anchor[j, 2*self.anchor_dim + self.num_y_steps:2*self.anchor_dim + 2*self.num_y_steps]
                 ax.plot(x_g, self.anchor_y_steps, z_g, color=color)
 
     def draw_3d_curves_new(self, ax, lane_anchor, h_cam, draw_type='laneline', color=[0, 0, 1]):
@@ -521,9 +520,12 @@ class Visualizer:
                 if self.no_3d:
                     z_g = np.zeros_like(x_gflat)
                     visibility = np.ones_like(x_gflat)
-                else:
-                    z_g = lane_anchor[j, self.num_y_steps:2*self.num_y_steps]
-                    visibility = lane_anchor[j, 2*self.num_y_steps:3*self.num_y_steps]
+                # else:
+                    # z_g = lane_anchor[j, self.num_y_steps:2*self.num_y_steps]
+                    # visibility = lane_anchor[j, 2*self.num_y_steps:3*self.num_y_steps]
+                
+                z_g = np.zeros_like(x_gflat) #new
+                visibility = lane_anchor[j, self.num_y_steps:2*self.num_y_steps] #new
                 x_gflat = x_gflat[np.where(visibility > self.prob_th)]
                 z_g = z_g[np.where(visibility > self.prob_th)]
                 if len(x_gflat) > 0:
@@ -541,9 +543,9 @@ class Visualizer:
                 if self.no_3d:
                     z_g = np.zeros_like(x_gflat)
                     visibility = np.ones_like(x_gflat)
-                else:
-                    z_g = lane_anchor[j, self.anchor_dim + self.num_y_steps:self.anchor_dim + 2*self.num_y_steps]
-                    visibility = lane_anchor[j, self.anchor_dim + 2*self.num_y_steps:self.anchor_dim + 3*self.num_y_steps]
+                # else:
+                    # z_g = lane_anchor[j, self.anchor_dim + self.num_y_steps:self.anchor_dim + 2*self.num_y_steps]
+                    # visibility = lane_anchor[j, self.anchor_dim + 2*self.num_y_steps:self.anchor_dim + 3*self.num_y_steps]
                 x_gflat = x_gflat[np.where(visibility > self.prob_th)]
                 z_g = z_g[np.where(visibility > self.prob_th)]
                 if len(x_gflat) > 0:
@@ -555,15 +557,15 @@ class Visualizer:
                     ax.plot(x_g, y_g, z_g, color=color)
 
             # draw the additional centerline for the merging case
-            if draw_type is 'centerline' and lane_anchor[j, 3*self.anchor_dim - 1] > self.prob_th:
-                x_offsets = lane_anchor[j, 2*self.anchor_dim:2*self.anchor_dim + self.num_y_steps]
+            if draw_type is 'centerline' and lane_anchor[j, 2*self.anchor_dim - 1] > self.prob_th: #3*self.anchor_dim
+                x_offsets = lane_anchor[j, self.anchor_dim:self.anchor_dim + self.num_y_steps] #2*self.anchor_dim:2*self.anchor_dim
                 x_gflat = x_offsets + self.anchor_x_steps[j]
                 if self.no_3d:
                     z_g = np.zeros_like(x_gflat)
                     visibility = np.ones_like(x_gflat)
-                else:
-                    z_g = lane_anchor[j, 2*self.anchor_dim + self.num_y_steps:2*self.anchor_dim + 2*self.num_y_steps]
-                    visibility = lane_anchor[j, 2*self.anchor_dim + 2*self.num_y_steps:2*self.anchor_dim + 3*self.num_y_steps]
+                # else:
+                    # z_g = lane_anchor[j, 2*self.anchor_dim + self.num_y_steps:2*self.anchor_dim + 2*self.num_y_steps]
+                    # visibility = lane_anchor[j, 2*self.anchor_dim + 2*self.num_y_steps:2*self.anchor_dim + 3*self.num_y_steps]
                 x_gflat = x_gflat[np.where(visibility > self.prob_th)]
                 z_g = z_g[np.where(visibility > self.prob_th)]
                 if len(x_gflat) > 0:
@@ -707,6 +709,7 @@ class Visualizer:
             # during training, only visualize the first sample of this batch
             if i > 0 and not evaluate:
                 break
+            # print('images', images.shape)
             im = images.permute(0, 2, 3, 1).data.cpu().numpy()[i]
             # the vgg_std and vgg_mean are for images in [0, 1] range
             im = im * np.array(self.vgg_std)
@@ -723,21 +726,21 @@ class Visualizer:
             else:
                 pred_anchors[:, self.anchor_dim - 1] = nms_1d(pred_anchors[:, self.anchor_dim - 1])
                 pred_anchors[:, 2 * self.anchor_dim - 1] = nms_1d(pred_anchors[:, 2 * self.anchor_dim - 1])
-                pred_anchors[:, 3 * self.anchor_dim - 1] = nms_1d(pred_anchors[:, 3 * self.anchor_dim - 1])
+                # pred_anchors[:, 3 * self.anchor_dim - 1] = nms_1d(pred_anchors[:, 3 * self.anchor_dim - 1])
 
-            H_g2im, P_g2im, H_crop, H_im2ipm = dataset.transform_mats(idx[i])
+            H_g2im, P_g2im, H_crop, H_im2ipm = dataset.transform_mats(idx[i]) # used the real height and cam pitch
             P_gt = np.matmul(H_crop, H_g2im)
             H_g2im_pred = homograpthy_g2im(pred_cam_pitch[i],
                                            pred_cam_height[i], dataset.K)
             P_pred = np.matmul(H_crop, H_g2im_pred)
 
             # consider data augmentation
-            P_gt = np.matmul(aug_mat[i, :, :], P_gt)
-            P_pred = np.matmul(aug_mat[i, :, :], P_pred)
+            P_gt = np.matmul(aug_mat[i, :, :], P_gt) # ground to image
+            P_pred = np.matmul(aug_mat[i, :, :], P_pred) # ground to image
 
             # update transformation with image augmentation
-            H_im2ipm = np.matmul(H_im2ipm, np.linalg.inv(aug_mat[i, :, :]))
-            im_ipm = cv2.warpPerspective(im, H_im2ipm, (self.ipm_w, self.ipm_h))
+            H_im2ipm = np.matmul(H_im2ipm, np.linalg.inv(aug_mat[i, :, :])) #revert the applied augmenation to the image
+            im_ipm = cv2.warpPerspective(im, H_im2ipm, (self.ipm_w, self.ipm_h)) # apply projection to the bev plane
             im_ipm = np.clip(im_ipm, 0, 1)
 
             # draw lanes on image
@@ -883,17 +886,22 @@ def resample_laneline_in_y_with_vis(input_lane, y_steps, vis_vec):
         input_lane = np.concatenate([input_lane, np.zeros([input_lane.shape[0], 1], dtype=np.float32)], axis=1)
 
     f_x = interp1d(input_lane[:, 1], input_lane[:, 0], fill_value="extrapolate")
-    f_z = interp1d(input_lane[:, 1], input_lane[:, 2], fill_value="extrapolate")
+    # f_z = interp1d(input_lane[:, 1], input_lane[:, 2], fill_value="extrapolate")
     f_vis = interp1d(input_lane[:, 1], vis_vec, fill_value="extrapolate")
 
     x_values = f_x(y_steps)
-    z_values = f_z(y_steps)
+    # z_values = f_z(y_steps)
     vis_values = f_vis(y_steps)
 
-    x_values = x_values[vis_values > 0.5]
-    y_values = y_steps[vis_values > 0.5]
-    z_values = z_values[vis_values > 0.5]
-    return np.array([x_values, y_values, z_values]).T
+    # print('vis values', vis_values)
+    # print('x shape before', x_values.shape)
+    # x_values = x_values[vis_values > 0.5]
+    # print('x shape after', x_values.shape)
+    # print('vis values sum', np.sum(vis_values))
+    # y_values = y_steps[vis_values > 0.5]
+    y_values = y_steps
+    z_values = np.zeros_like(x_values)#z_values[vis_values > 0.5]
+    return np.array([x_values, y_values]).T#, z_values]).T
 
 
 def homography_im2ipm_norm(top_view_region, org_img_size, crop_y, resize_img_size, cam_pitch, cam_height, K):
