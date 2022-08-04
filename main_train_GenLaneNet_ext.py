@@ -372,8 +372,8 @@ def train_net():
             losses.update(loss.item(), input.size(0))
 
             # Clip gradients (usefull for instabilities or mistakes in ground truth)
-            if args.clip_grad_norm != 0:
-                nn.utils.clip_grad_norm(model.parameters(), args.clip_grad_norm)
+            # if args.clip_grad_norm != 0:
+                # nn.utils.clip_grad_norm(model.parameters(), args.clip_grad_norm)
 
             # Setup backward pass
             loss.backward()
@@ -530,7 +530,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                 # Plot curves in two views
                 if (i + 1) % args.save_freq == 0 or args.evaluate:
                     vs_saver.save_result_new(dataset, 'valid', epoch, i, idx,
-                                             input, gt, output_net, pred_pitch, pred_hcam, evaluate=args.evaluate)
+                                             input, gt, output_net, pred_pitch, pred_hcam, evaluate=False)#args.evaluate)
                                              
                 
 
@@ -631,11 +631,12 @@ if __name__ == '__main__':
     crit_string = 'loss_gflat'
 
     # for the case only running evaluation
-    args.evaluate = False
+    args.evaluate = True
 
     # settings for save and visualize
     args.print_freq = 50
     args.save_freq = 50
+    args.nepochs = 300
 
     # run the training
     train_net()
