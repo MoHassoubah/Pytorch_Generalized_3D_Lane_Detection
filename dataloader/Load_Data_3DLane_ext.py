@@ -105,7 +105,7 @@ class LaneDataset(Dataset):
         if self.no_3d:
             self.anchor_dim = self.num_y_steps + 1
         else:
-            self.anchor_dim = 2 * args.num_y_steps + 1 #3 * args.num_y_steps + 1
+            self.anchor_dim = 3 * args.num_y_steps + 1
 
         self.y_ref = args.y_ref
         self.ref_id = np.argmin(np.abs(self.num_y_steps - self.y_ref))
@@ -189,8 +189,8 @@ class LaneDataset(Dataset):
             # assign anchor tensor values
             gt_anchor[ass_id, 0, 0: self.num_y_steps] = x_off_values
             if not self.no_3d:
-                gt_anchor[ass_id, 0, self.num_y_steps:2*self.num_y_steps] = visibility #z_values
-                # gt_anchor[ass_id, 0, 2*self.num_y_steps:3*self.num_y_steps] = visibility
+                gt_anchor[ass_id, 0, self.num_y_steps:2*self.num_y_steps] = z_values
+                gt_anchor[ass_id, 0, 2*self.num_y_steps:3*self.num_y_steps] = visibility
 
             gt_anchor[ass_id, 0, -1] = 1.0
 
@@ -211,14 +211,14 @@ class LaneDataset(Dataset):
                 if gt_anchor[ass_id, 1, -1] > 0:  # the case one splitting lane has been assigned
                     gt_anchor[ass_id, 2, 0: self.num_y_steps] = x_off_values
                     if not self.no_3d:
-                        gt_anchor[ass_id, 2, self.num_y_steps:2*self.num_y_steps] = visibility #z_values
-                        # gt_anchor[ass_id, 2, 2*self.num_y_steps:3*self.num_y_steps] = visibility
+                        gt_anchor[ass_id, 2, self.num_y_steps:2*self.num_y_steps] = z_values
+                        gt_anchor[ass_id, 2, 2*self.num_y_steps:3*self.num_y_steps] = visibility
                     gt_anchor[ass_id, 2, -1] = 1.0
                 else:
                     gt_anchor[ass_id, 1, 0: self.num_y_steps] = x_off_values
                     if not self.no_3d:
-                        gt_anchor[ass_id, 1, self.num_y_steps:2*self.num_y_steps] = visibility #z_values
-                        # gt_anchor[ass_id, 1, 2*self.num_y_steps:3*self.num_y_steps] = visibility
+                        gt_anchor[ass_id, 1, self.num_y_steps:2*self.num_y_steps] = z_values
+                        gt_anchor[ass_id, 1, 2*self.num_y_steps:3*self.num_y_steps] = visibility
                     gt_anchor[ass_id, 1, -1] = 1.0
 
         if self.data_aug:
