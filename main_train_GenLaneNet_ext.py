@@ -602,7 +602,7 @@ if __name__ == '__main__':
     # define evaluator
     evaluator = eval_3D_lane.LaneEval(args)
     args.prob_th = 0.5
-    args.evaluate = True
+    
     args.nepochs = 300
 
     # define the network model
@@ -614,7 +614,7 @@ if __name__ == '__main__':
     crit_string = 'loss_gflat'
 
     # for the case only running evaluation
-    args.evaluate = False
+    args.evaluate = True#False
 
     # settings for save and visualize
     args.print_freq = 50
