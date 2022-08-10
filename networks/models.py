@@ -25,6 +25,20 @@ def make_layers(cfg, in_channels=3, batch_norm=False):
                 layers += [conv2d, nn.ReLU(inplace=True)]
             in_channels = v
     return nn.Sequential(*layers)
+    
+def make_3d_layers(cfg, in_channels=3, batch_norm=False):
+    layers = []
+    for v in cfg:
+        if v == 'M':
+            layers += [nn.MaxPool3d(kernel_size=2, stride=2)]
+        else:
+            conv3d = nn.Conv3d(in_channels, v, kernel_size=3, padding=1)
+            if batch_norm:
+                layers += [conv3d, nn.BatchNorm3d(v), nn.ReLU(inplace=True)]
+            else:
+                layers += [conv2d, nn.ReLU(inplace=True)]
+            in_channels = v
+    return nn.Sequential(*layers)
 
 
 
@@ -109,6 +123,14 @@ def make_one_layer(in_channels, out_channels, kernel_size=3, padding=1, stride=1
         layers = [conv2d, nn.BatchNorm2d(out_channels), nn.ReLU(inplace=True)]
     else:
         layers = [conv2d, nn.ReLU(inplace=True)]
+    return layers
+    
+def make_one_3d_layer(in_channels, out_channels, kernel_size=3, padding=1, stride=1, batch_norm=False):
+    conv3d = nn.Conv3d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, stride=stride)
+    if batch_norm:
+        layers = [conv3d, nn.BatchNorm3d(out_channels), nn.ReLU(inplace=True)]
+    else:
+        layers = [conv3d, nn.ReLU(inplace=True)]
     return layers
     
 class BevEncode(nn.Module):
@@ -198,6 +220,8 @@ class LanePredictionHead(nn.Module):
         layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
         layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
         layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        # input to layer--> [8, 64, 26, 16]
+        # output after layer [8, 64, 4, 16]
         self.features = nn.Sequential(*layers)
 
         # x suppose to be N X 64 X 4 X ipm_w/8, need to be reshaped to N X 256 X ipm_w/8 X 1
@@ -205,14 +229,71 @@ class LanePredictionHead(nn.Module):
         dim_rt_layers = []
         dim_rt_layers += make_one_layer(256, 128, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)
         dim_rt_layers += [nn.Conv2d(128, self.num_lane_type*self.anchor_dim, kernel_size=(5, 1), padding=(2, 0))]
+        # Output after the layer [8, 93, 16, 1], each anchor line has 3 types, each anchor line has 31 (x,z,vis + 1 ex_pro)values
         self.dim_rt = nn.Sequential(*dim_rt_layers)
 
     def forward(self, x):
+        print('x before features', x.shape)
         x = self.features(x)
+        print('x after features', x.shape)
         # x suppose to be N X 64 X 4 X ipm_w/8, reshape to N X 256 X ipm_w/8 X 1
         sizes = x.shape
         x = x.reshape(sizes[0], sizes[1]*sizes[2], sizes[3], 1)
         x = self.dim_rt(x)
+        print('x after dim_rt', x.shape)
+        x = x.squeeze(-1).transpose(1, 2)
+        # apply sigmoid to the probability terms to make it in (0, 1)
+        for i in range(self.num_lane_type):
+            x[:, :, i*self.anchor_dim + 2*self.num_y_steps:(i+1)*self.anchor_dim] = \
+                torch.sigmoid(x[:, :, i*self.anchor_dim + 2*self.num_y_steps:(i+1)*self.anchor_dim])
+        return x
+
+
+class Lane3DPredictionHead(nn.Module):
+    def __init__(self, num_lane_type, num_y_steps, batch_norm=False):
+        super(Lane3DPredictionHead, self).__init__()
+        self.num_lane_type = num_lane_type
+        self.num_y_steps = num_y_steps
+        self.anchor_dim = 3*self.num_y_steps + 1
+        layers = []
+        # k=3 with pad=0 -> decreases the size by 2
+        layers += make_one_3d_layer(64, 64, kernel_size=3, padding=(0, 0, 1), batch_norm=batch_norm)
+        layers += make_one_3d_layer(64, 64, kernel_size=3, padding=(0, 0, 1), batch_norm=batch_norm)
+        self.features_3d = nn.Sequential(*layers)
+        
+        layers = []
+        layers += make_one_layer(64, 64, kernel_size=3, padding=(0, 1), batch_norm=batch_norm)
+
+        # k=5 with pad=0 -> decreases the size by 4
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        layers += make_one_layer(64, 64, kernel_size=5, padding=(0, 2), batch_norm=batch_norm)
+        # input to layer--> [8, 64, 26, 16]
+        # output after layer [8, 64, 4, 16]
+        self.features = nn.Sequential(*layers)
+
+        # x suppose to be N X 64 X 4 X ipm_w/8, need to be reshaped to N X 256 X ipm_w/8 X 1
+        # TODO: use large kernel_size in x or fc layer to estimate z with global parallelism
+        dim_rt_layers = []
+        dim_rt_layers += make_one_layer(256, 128, kernel_size=(5, 1), padding=(2, 0), batch_norm=batch_norm)
+        dim_rt_layers += [nn.Conv2d(128, self.num_lane_type*self.anchor_dim, kernel_size=(5, 1), padding=(2, 0))]
+        # Output after the layer [8, 93, 16, 1], each anchor line has 3 types, each anchor line has 31 (x,z,vis + 1 ex_pro)values
+        self.dim_rt = nn.Sequential(*dim_rt_layers)
+
+    def forward(self, x):
+        # print('x before features', x.shape)
+        x = self.features_3d(x)
+        sizes = x.shape
+        x = x.reshape(sizes[0], sizes[1]*sizes[2], sizes[3], sizes[4])
+        
+        x = self.features(x)
+        # print('x after features', x.shape)
+        # x suppose to be N X 64 X 4 X ipm_w/8, reshape to N X 256 X ipm_w/8 X 1
+        sizes = x.shape
+        x = x.reshape(sizes[0], sizes[1]*sizes[2], sizes[3], 1)
+        x = self.dim_rt(x)
+        # print('x after dim_rt', x.shape)
         x = x.squeeze(-1).transpose(1, 2)
         # apply sigmoid to the probability terms to make it in (0, 1)
         for i in range(self.num_lane_type):
@@ -255,10 +336,12 @@ class LiftSplatShoot(nn.Module):
 
         # self.encoder = make_layers([64, 'M', 64, 'M', 64, 'M', 64,'M', 64,'M', 64,], self.camC, batch_norm=True)
         # Conv layers to convert original resolution binary map to target resolution with high-dimension
-        self.encoder = make_layers([64, 'M', 64, 'M', 64, 'M', 64], self.camC, batch_norm=True)
+        # self.encoder = make_layers([64, 'M', 64, 'M', 64, 'M', 64], self.camC, batch_norm=True)
+        self.encoder = make_3d_layers([64, 'M', 64, 'M', 64, 'M', 64], self.camC, batch_norm=True)
         
         # self.lane_out = LanePredictionHead(32, self.num_lane_type, self.num_y_steps, batch_norm=True)
-        self.lane_out = LanePredictionHead(self.num_lane_type, self.num_y_steps, True)
+        # self.lane_out = LanePredictionHead(self.num_lane_type, self.num_y_steps, True)
+        self.lane_out = Lane3DPredictionHead(self.num_lane_type, self.num_y_steps, True)
 
         # toggle using QuickCumsum vs. autograd
         self.use_quickcumsum = True
@@ -381,7 +464,7 @@ class LiftSplatShoot(nn.Module):
         # print("final dim before collapse", final.shape)
         
         # collapse Z
-        final = torch.cat(final.unbind(dim=2), 1)# seems dim 1 is C*Z
+        # final = torch.cat(final.unbind(dim=2), 1)# seems dim 1 is C*Z
         # print("final dim after collapse", final.shape)
 
         return final

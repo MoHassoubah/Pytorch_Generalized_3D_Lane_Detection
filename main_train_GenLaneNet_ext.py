@@ -81,7 +81,9 @@ def train_net():
     if not args.no_3d:
         valid_dataset.set_z_std(train_dataset._z_std)
     valid_dataset.normalize_lane_label()
+    args.batch_size = 8
     valid_loader = get_loader(valid_dataset, args)
+    args.batch_size = 6
 
     # extract valid set labels for evaluation later
     global valid_set_labels
@@ -158,7 +160,8 @@ def train_net():
 
     # xbound=[-5.0, 5.0, 0.5]
     # ybound=[0.0, 50.0, 0.5]
-    zbound=[-10.0, 10.0, 20.0]
+    # zbound=[-10.0, 10.0, 20.0]
+    zbound=[-10.0, 10.0, 0.5]
     dbound=[4.0, 45.0, 1.0]
 
     grid_conf = {
@@ -604,6 +607,7 @@ if __name__ == '__main__':
     args.prob_th = 0.5
     
     args.nepochs = 300
+    args.batch_size = 6
 
     # define the network model
     args.num_class = 2  # 1 background + n lane labels

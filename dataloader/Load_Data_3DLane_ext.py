@@ -133,6 +133,7 @@ class LaneDataset(Dataset):
                 self._gt_laneline_visibility_all, \
                 self._gt_centerline_visibility_all = self.init_dataset_3D(dataset_base_dir, json_file_path)
         self.n_samples = self._label_image_path.shape[0]
+        # print('self.n_samples',self.n_samples)
 
         if save_std is True:
             with open(ops.join(args.data_dir, 'geo_anchor_std.json'), 'w') as jsonFile:
