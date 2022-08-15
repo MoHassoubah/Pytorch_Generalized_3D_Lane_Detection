@@ -401,7 +401,7 @@ class LaneDataset(Dataset):
             gt_lanes = [lane for lane in gt_lanes if lane.shape[0] > 1]
 
             # convert 3d lanes to flat ground space
-            self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
+            # # # self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
 
             gt_anchors = []
             ass_ids = []
@@ -438,7 +438,7 @@ class LaneDataset(Dataset):
                 gt_lanes = [lane for lane in gt_lanes if lane.shape[0] > 1]
 
                 # convert 3d lanes to flat ground space
-                self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
+                # # # self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
 
                 gt_anchors = []
                 ass_ids = []
@@ -901,9 +901,9 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         line = np.vstack([x_g, anchor_y_steps, z_g]).T
         # line = line[visibility > prob_th, :]
         # convert to 3D ground space
-        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])#<<<<<<<<<<<<<<<<<contribution
-        line[:, 0] = x_g
-        line[:, 1] = y_g
+        # x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])#<<<<<<<<<<<<<<<<<contribution
+        # line[:, 0] = x_g
+        # line[:, 1] = y_g
         line = resample_laneline_in_y_with_vis(line, anchor_y_steps, visibility)
         if line.shape[0] >= 2:
             lanelines_out.append(line.data.tolist())
@@ -916,10 +916,10 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         visibility = pred_anchor[j, anchor_dim + 2*num_y_steps:anchor_dim + 3*num_y_steps]
         line = np.vstack([x_g, anchor_y_steps, z_g]).T
         # line = line[visibility > prob_th, :]
-        # convert to 3D ground space
-        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])
-        line[:, 0] = x_g
-        line[:, 1] = y_g
+        # # convert to 3D ground space
+        # x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])
+        # line[:, 0] = x_g
+        # line[:, 1] = y_g
         line = resample_laneline_in_y_with_vis(line, anchor_y_steps, visibility)
         if line.shape[0] >= 2:
             centerlines_out.append(line.data.tolist())
@@ -932,10 +932,10 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         visibility = pred_anchor[j, 2*anchor_dim + 2*num_y_steps:2*anchor_dim + 3*num_y_steps]
         line = np.vstack([x_g, anchor_y_steps, z_g]).T
         # line = line[visibility > prob_th, :]
-        # convert to 3D ground space
-        x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])
-        line[:, 0] = x_g
-        line[:, 1] = y_g
+        # # convert to 3D ground space
+        # x_g, y_g = transform_lane_gflat2g(h_cam, line[:, 0], line[:, 1], line[:, 2])
+        # line[:, 0] = x_g
+        # line[:, 1] = y_g
         line = resample_laneline_in_y_with_vis(line, anchor_y_steps, visibility)
         if line.shape[0] >= 2:
             centerlines_out.append(line.data.tolist())
