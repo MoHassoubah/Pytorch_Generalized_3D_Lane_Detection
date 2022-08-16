@@ -14,6 +14,7 @@ from dataloader.Load_Data_3DLane_ext import *
 from networks import GeoNet3D_ext, erfnet
 from tools.utils import *
 from tools import eval_3D_lane
+from networks.models import compile_model
 
 
 def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
@@ -42,30 +43,43 @@ def deploy(args, loader, dataset, model_seg, model_geo, vs_saver, test_gt_file, 
     with torch.no_grad():
         with open(lane_pred_file, 'w') as jsonFile:
             # Start validation loop
-            for i, (input, _, gt, idx, gt_hcam, gt_pitch) in tqdm(enumerate(loader)):
+            for i, (input, _, gt, idx, gt_hcam, gt_pitch,rots, trans, post_rot, post_tran) in tqdm(enumerate(loader)):
                 if not args.no_cuda:
                     input, gt = input.cuda(non_blocking=True), gt.cuda(non_blocking=True)
-                    input = input.float()
+                    gt_hcam = gt_hcam.cuda(0)
+                    gt_pitch = gt_pitch.cuda(0)
+                    rots = rots.cuda(0)
+                    trans = trans.cuda(0)
+                    post_rot = post_rot.cuda(0)
+                    post_tran = post_tran.cuda(0)
                 input = input.contiguous()
                 input = torch.autograd.Variable(input)
 
-                # if not args.fix_cam and not args.pred_cam:
-                # ATTENTION: here requires to update with test dataset args
-                model_geo.update_projection(args, gt_hcam, gt_pitch)
+                # # if not args.fix_cam and not args.pred_cam:
+                # # ATTENTION: here requires to update with test dataset args
+                # model_geo.update_projection(args, gt_hcam, gt_pitch)
 
                 # Evaluate model
-                try:
-                    output_seg = model_seg(input, no_lane_exist=True)
-                    # output1 = F.softmax(output1, dim=1)
-                    output_seg = output_seg.softmax(dim=1)
-                    output_seg = output_seg / torch.max(torch.max(output_seg, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
-                    output_seg = output_seg[:, 1:, :, :]
-                    output_geo, pred_hcam, pred_pitch = model_geo(output_seg)
-                except RuntimeError as e:
-                    print("Batch with idx {} skipped due to singular matrix".format(idx.numpy()))
-                    print(e)
-                    continue
+                # try:
+                    # output_seg = model_seg(input, no_lane_exist=True)
+                    # # output1 = F.softmax(output1, dim=1)
+                    # output_seg = output_seg.softmax(dim=1)
+                    # output_seg = output_seg / torch.max(torch.max(output_seg, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
+                    # output_seg = output_seg[:, 1:, :, :]
+                pred_pitch = gt_pitch
+                pred_hcam = gt_hcam
+                output_geo, w_l1, w_ce = model_geo(input,
+                    rots,
+                    trans,
+                    post_rot,
+                    post_tran,
+                    )
+                # except RuntimeError as e:
+                    # print("Batch with idx {} skipped due to singular matrix".format(idx.numpy()))
+                    # print(e)
+                    # continue
 
+                input = input.squeeze(1)
                 gt = gt.data.cpu().numpy()
                 output_geo = output_geo.data.cpu().numpy()
                 pred_pitch = pred_pitch.data.cpu().numpy().flatten()
@@ -80,7 +94,7 @@ def deploy(args, loader, dataset, model_seg, model_geo, vs_saver, test_gt_file, 
                 if vis:
                     # Plot curves in two views
                     vs_saver.save_result_new(dataset, args.vis_folder, epoch, i, idx,
-                                             input, gt, output_geo, pred_pitch, pred_hcam, evaluate=vis)
+                                             input, gt, output_geo, pred_pitch, pred_hcam, evaluate=False)#args.evaluate)
 
                 # visualize and write results
                 for j in range(num_el):
@@ -103,18 +117,26 @@ def deploy(args, loader, dataset, model_seg, model_geo, vs_saver, test_gt_file, 
                     jsonFile.write('\n')
 
         # evaluation at varying thresholds
-        eval_stats_pr = evaluator.bench_one_submit_varying_probs(lane_pred_file, test_gt_file)
-        max_f_prob = eval_stats_pr['max_F_prob_th']
+        # eval_stats_pr = evaluator.bench_one_submit_varying_probs(lane_pred_file, test_gt_file)
+        # max_f_prob = eval_stats_pr['max_F_prob_th']
 
         # evaluate at the point with max F-measure. Additional eval of position error.
-        eval_stats = evaluator.bench_one_submit(lane_pred_file, test_gt_file, prob_th=max_f_prob)
+        eval_stats = evaluator.bench_one_submit(lane_pred_file, test_gt_file)#, prob_th=max_f_prob)
 
         print("Metrics: AP, F-score, x error (close), x error (far), z error (close), z error (far)")
+        # print(
+            # "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats_pr['laneline_AP'], eval_stats[0],
+                                                                         # eval_stats[3], eval_stats[4],
+                                                                         # eval_stats[5], eval_stats[6]))
+        # print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats_pr['centerline_AP'], eval_stats[7],
+                                                                             # eval_stats[10], eval_stats[11],
+                                                                             # eval_stats[12], eval_stats[13]))
+                                                                             
         print(
-            "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats_pr['laneline_AP'], eval_stats[0],
+            "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(  eval_stats[2], eval_stats[0],
                                                                          eval_stats[3], eval_stats[4],
                                                                          eval_stats[5], eval_stats[6]))
-        print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats_pr['centerline_AP'], eval_stats[7],
+        print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format( eval_stats[9], eval_stats[7],
                                                                              eval_stats[10], eval_stats[11],
                                                                              eval_stats[12], eval_stats[13]))
 
@@ -128,7 +150,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # manual settings
-    args.dataset_dir = '/media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
+    args.dataset_dir = './media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
     args.dataset_name = 'illus_chg'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
     args.mod = 'Gen_LaneNet_ext'  # model name
     test_name = 'test'  # test set name
@@ -158,13 +180,107 @@ if __name__ == '__main__':
 
     # Define network
     model_seg = erfnet.ERFNet(2)  # 2-class model
-    model_geo = GeoNet3D_ext.Net(args)
-    define_init_weights(model_geo, args.weight_init)
+    # model_geo = GeoNet3D_ext.Net(args)
+    
+    #####################################
+    #####################################
+    
+    ##############
+    ##############
+    lane_detection = {}
+    
+    lane_detection['y_ref'] = 5.0
+    # # # lane_detection['top_view_region'] = np.array([[-10, 53], [10, 53], [-10, -47], [10, -47]])
+    
+    lane_detection['top_view_region'] = args.top_view_region #np.array([[-5, 53], [5, 53], [-5, 0], [5, 0]])
+    
+    # # # lane_detection['anchor_y_steps'] = np.array([-45, -40, -35, -30, -20, -10, 0, 10, 30, 50])
+    # lane_detection['anchor_y_steps'] = np.array([0, 10, 30, 50])
+    
+    lane_detection['anchor_y_steps'] = args.anchor_y_steps #np.array([0,5, 10, 15,20,25,30,35,40, 50])
+    
+    lane_detection['num_y_steps'] = args.num_y_steps #len(lane_detection['anchor_y_steps'])
+    # compute anchor steps
+    x_min = lane_detection['top_view_region'][0, 0]
+    x_max = lane_detection['top_view_region'][1, 0]
+    lane_detection['x_min'] = x_min
+    lane_detection['x_max'] = x_max
+    lane_detection['y_min'] = lane_detection['top_view_region'][2, 1]
+    lane_detection['y_max'] = lane_detection['top_view_region'][1, 1]
+    lane_detection['ipm_w'] = 128
+    lane_detection['n_anchors'] = int(args.ipm_w / 8)
+    lane_detection['anchor_x_steps'] = np.linspace(x_min, x_max, lane_detection['n_anchors'], endpoint=True) #np.array([0])# #np.int(lane_detection['ipm_w']/8)
+    # lane_detection['num_y_steps'] = len(lane_detection['anchor_y_steps'])
+    # lane_detection['anchor_dim'] = lane_detection['num_y_steps']+1
+    
+    lane_detection['ref_id'] = np.argmin(np.abs(lane_detection['anchor_y_steps'] - lane_detection['y_ref'] ))
+    
+    lane_detection['line_names'] = ['road_divider', 'lane_divider']
+    
+    ##############
+    ##############
+    
+    
+    H=1080
+    W=1920
+    resize_lim=(0.193, 0.225)
+    final_dim= (270, 480) #(128, 352)
+    bot_pct_lim=(0.0, 0.22)
+    rot_lim=(-5.4, 5.4)
+    rand_flip=True
+    ncams=1#6
+    max_grad_norm=5.0
+    pos_weight=2.13
+    logdir='./runs'
+    
+    data_aug_conf = {
+                    # 'resize_lim': resize_lim,
+                    'final_dim': final_dim,
+                    # 'rot_lim': rot_lim,
+                    # 'H': H, 'W': W,
+                    # 'rand_flip': rand_flip,
+                    # 'bot_pct_lim': bot_pct_lim,
+                    # # 'cams': ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
+                             # # 'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT'],
+                    # 'cams': ['CAM_FRONT'],
+                    # 'Ncams': ncams,
+                }
+    
+    xbound=[-32.0, 32.0, 0.5]
+    ybound=[0.0, 104.0, 0.5]
+
+    # xbound=[-5.0, 5.0, 0.5]
+    # ybound=[0.0, 50.0, 0.5]
+    # zbound=[-10.0, 10.0, 20.0]
+    zbound=[-10.0, 10.0, 0.5]
+    dbound=[4.0, 45.0, 1.0]
+
+    grid_conf = {
+        'xbound': xbound,
+        'ybound': ybound,
+        'zbound': zbound,
+        'dbound': dbound,
+    }
+    # data_aug_conf -> final dim
+    # outC needed for the bevEncode-> bevEncode removed
+    # the grid conf is kind of important
+    # num_y_steps defines the size of the the output
+    model_geo = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K)
+    
+    # define_init_weights(model_geo, args.weight_init)
 
     if not args.no_cuda:
         # Load model on gpu before passing params to optimizer
-        model_seg = model_seg.cuda()
-        model_geo = model_geo.cuda()
+        model_seg = model_seg.cuda(0)
+        model_geo = model_geo.cuda(0)
+        
+    new_params = model_geo.state_dict().copy()
+    saved_state_dict = torch.load('G:\Hassoubah\lss\models\model525000.pt')
+
+    saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
+    new_params.update(saved_state_dict) 
+    
+    model_geo.load_state_dict(new_params)
 
     # load segmentation model
     checkpoint = torch.load(pretrained_feat_model)
