@@ -222,11 +222,19 @@ def train_net():
                                                      train_dataset.anchor_x_steps, train_dataset.anchor_y_steps,
                                                      train_dataset._x_off_std, train_dataset._y_off_std,
                                                      train_dataset._z_std, args.pred_cam, args.no_cuda)
+        
+        criterion_val = Loss_crit.Laneline_loss_gflat_3D(8, train_dataset.num_types,
+                                                     train_dataset.anchor_x_steps, train_dataset.anchor_y_steps,
+                                                     train_dataset._x_off_std, train_dataset._y_off_std,
+                                                     train_dataset._z_std, args.pred_cam, args.no_cuda)
     else:
         criterion = Loss_crit.Laneline_loss_gflat(train_dataset.num_types, args.num_y_steps, args.pred_cam)
 
     if not args.no_cuda:
         criterion = criterion.cuda(0)
+        
+        # criterion_val = criterion_val.cuda(0)
+        
 
     # Logging setup
     best_epoch = 0
@@ -426,7 +434,7 @@ def train_net():
             writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
             writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
-        total_score = losses.avg
+        total_score = losses_valid #losses.avg
 
         # Adjust learning_rate if loss plateaued
         # if args.lr_policy == 'plateau':
@@ -525,6 +533,14 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                     H_g2im, P_g2im, H_crop, H_im2ipm = dataset.transform_mats(idx[j])
                     json_line = valid_set_labels[im_id]
                     lane_anchors = output_net[j]
+                    '''
+                    The ground truth json files carries the points in the real 3D coordinates,
+                    while trainig or validation, the points from the json files x,y values are transformed 
+                    to the virtual flat coordinates 
+                    and while evaluation the points (x,y) are transfomed back from the virtual coordinates to
+                    the 3D real coordinates and saved in the json files
+                    
+                    '''
                     # convert to json output format
                     # P_g2gflat = np.matmul(np.linalg.inv(H_g2im), P_g2im)
                     lanelines_pred, centerlines_pred, lanelines_prob, centerlines_prob = \
@@ -604,6 +620,7 @@ if __name__ == '__main__':
     args.prob_th = 0.5
     
     args.nepochs = 300
+    args.batch_size = 6
 
     # define the network model
     args.num_class = 2  # 1 background + n lane labels
@@ -611,7 +628,7 @@ if __name__ == '__main__':
     args.mod = 'Gen_LaneNet_ext'
     args.y_ref = 5  # new anchor prefer closer range gt assign
     global crit_string
-    crit_string = 'loss_gflat'
+    crit_string = 'loss_gflat' #'loss_gflat_3D'#'loss_gflat'
 
     # for the case only running evaluation
     args.evaluate = True#False
