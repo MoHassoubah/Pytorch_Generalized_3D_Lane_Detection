@@ -123,7 +123,7 @@ def deploy(args, loader, dataset, model_seg, model_geo, vs_saver, test_gt_file, 
         # evaluate at the point with max F-measure. Additional eval of position error.
         eval_stats = evaluator.bench_one_submit(lane_pred_file, test_gt_file)#, prob_th=max_f_prob)
 
-        print("Metrics: AP, F-score, x error (close), x error (far), z error (close), z error (far)")
+        print("Metrics: AP, F-score, x error (Vclose), x error (close), x error (far), z error (Vclose), z error (close), z error (far)")
         # print(
             # "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats_pr['laneline_AP'], eval_stats[0],
                                                                          # eval_stats[3], eval_stats[4],
@@ -133,12 +133,14 @@ def deploy(args, loader, dataset, model_seg, model_geo, vs_saver, test_gt_file, 
                                                                              # eval_stats[12], eval_stats[13]))
                                                                              
         print(
-            "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(  eval_stats[2], eval_stats[0],
+            "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(  eval_stats[2], eval_stats[0],
                                                                          eval_stats[3], eval_stats[4],
-                                                                         eval_stats[5], eval_stats[6]))
-        print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format( eval_stats[9], eval_stats[7],
-                                                                             eval_stats[10], eval_stats[11],
-                                                                             eval_stats[12], eval_stats[13]))
+                                                                         eval_stats[5], eval_stats[6],
+                                                                         eval_stats[7], eval_stats[8]))
+        print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format( eval_stats[11], eval_stats[9],
+                                                                             eval_stats[12], eval_stats[13],
+                                                                             eval_stats[14], eval_stats[15],
+                                                                             eval_stats[16], eval_stats[17]))
 
     return eval_stats
 
@@ -221,97 +223,112 @@ if __name__ == '__main__':
     ##############
     
     
+    resolution_ratio = [0.3,0.25,0.22,0.15,0.1]
     H=1080
     W=1920
-    resize_lim=(0.193, 0.225)
-    final_dim= (270, 480) #(128, 352)
-    bot_pct_lim=(0.0, 0.22)
-    rot_lim=(-5.4, 5.4)
-    rand_flip=True
-    ncams=1#6
-    max_grad_norm=5.0
-    pos_weight=2.13
-    logdir='./runs'
     
-    data_aug_conf = {
-                    # 'resize_lim': resize_lim,
-                    'final_dim': final_dim,
-                    # 'rot_lim': rot_lim,
-                    # 'H': H, 'W': W,
-                    # 'rand_flip': rand_flip,
-                    # 'bot_pct_lim': bot_pct_lim,
-                    # # 'cams': ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
-                             # # 'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT'],
-                    # 'cams': ['CAM_FRONT'],
-                    # 'Ncams': ncams,
-                }
+    for ratio in resolution_ratio:
     
-    xbound=[-32.0, 32.0, 0.5]
-    ybound=[0.0, 104.0, 0.5]
-
-    # xbound=[-5.0, 5.0, 0.5]
-    # ybound=[0.0, 50.0, 0.5]
-    # zbound=[-10.0, 10.0, 20.0]
-    zbound=[-10.0, 10.0, 0.5]
-    dbound=[4.0, 45.0, 1.0]
-
-    grid_conf = {
-        'xbound': xbound,
-        'ybound': ybound,
-        'zbound': zbound,
-        'dbound': dbound,
-    }
-    # data_aug_conf -> final dim
-    # outC needed for the bevEncode-> bevEncode removed
-    # the grid conf is kind of important
-    # num_y_steps defines the size of the the output
-    model_geo = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K)
     
-    # define_init_weights(model_geo, args.weight_init)
-
-    if not args.no_cuda:
-        # Load model on gpu before passing params to optimizer
-        model_seg = model_seg.cuda(0)
-        model_geo = model_geo.cuda(0)
+        args.resize_w = int(W * ratio)
+        args.resize_h = int(H * ratio)
         
-    new_params = model_geo.state_dict().copy()
-    saved_state_dict = torch.load('G:\Hassoubah\lss\models\model525000.pt')
+        resize_lim=(0.193, 0.225)
+        final_dim= (args.resize_h, args.resize_w) #(128, 352)
+        bot_pct_lim=(0.0, 0.22)
+        rot_lim=(-5.4, 5.4)
+        rand_flip=True
+        ncams=1#6
+        max_grad_norm=5.0
+        pos_weight=2.13
+        logdir='./runs'
+        
+        data_aug_conf = {
+                        # 'resize_lim': resize_lim,
+                        'final_dim': final_dim,
+                        # 'rot_lim': rot_lim,
+                        # 'H': H, 'W': W,
+                        # 'rand_flip': rand_flip,
+                        # 'bot_pct_lim': bot_pct_lim,
+                        # # 'cams': ['CAM_FRONT_LEFT', 'CAM_FRONT', 'CAM_FRONT_RIGHT',
+                                 # # 'CAM_BACK_LEFT', 'CAM_BACK', 'CAM_BACK_RIGHT'],
+                        # 'cams': ['CAM_FRONT'],
+                        # 'Ncams': ncams,
+                    }
+        
+        xbound=[-32.0, 32.0, 0.5]
+        ybound=[0.0, 104.0, 0.5]
 
-    saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
-    new_params.update(saved_state_dict) 
-    
-    model_geo.load_state_dict(new_params)
+        # xbound=[-5.0, 5.0, 0.5]
+        # ybound=[0.0, 50.0, 0.5]
+        # zbound=[-10.0, 10.0, 20.0]
+        zbound=[-10.0, 10.0, 0.5]
+        dbound=[4.0, 45.0, 1.0]
 
-    # load segmentation model
-    checkpoint = torch.load(pretrained_feat_model)
-    model_seg = load_my_state_dict(model_seg, checkpoint['state_dict'])
-    model_seg.eval()  # do not back propagate to model1
+        grid_conf = {
+            'xbound': xbound,
+            'ybound': ybound,
+            'zbound': zbound,
+            'dbound': dbound,
+        }
+        # data_aug_conf -> final dim
+        # outC needed for the bevEncode-> bevEncode removed
+        # the grid conf is kind of important
+        # num_y_steps defines the size of the the output
+        model_geo = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K)
+        
+        # define_init_weights(model_geo, args.weight_init)
 
-    # load geometry model
-    best_test_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
-    if os.path.isfile(best_test_name):
-        sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
-        print("=> loading checkpoint '{}'".format(best_test_name))
-        checkpoint = torch.load(best_test_name)
-        model_geo.load_state_dict(checkpoint['state_dict'])
-    else:
-        print("=> no checkpoint found at '{}'".format(best_test_name))
+        if not args.no_cuda:
+            # Load model on gpu before passing params to optimizer
+            model_seg = model_seg.cuda(0)
+            model_geo = model_geo.cuda(0)
+            
 
-    # Data loader
-    test_dataset = LaneDataset(args.dataset_dir, test_gt_file, args)
-    # assign std of valid dataset to be consistent with train dataset
-    with open(ops.join(args.data_dir, 'geo_anchor_std.json')) as f:
-        anchor_std = json.load(f)
-    test_dataset.set_x_off_std(anchor_std['x_off_std'])
-    if not args.no_3d:
-        test_dataset.set_z_std(anchor_std['z_std'])
-    test_dataset.normalize_lane_label()
-    test_loader = get_loader(test_dataset, args)
+        # load segmentation model
+        checkpoint = torch.load(pretrained_feat_model)
+        model_seg = load_my_state_dict(model_seg, checkpoint['state_dict'])
+        model_seg.eval()  # do not back propagate to model1
 
-    # initialize visual saver
-    vs_saver = Visualizer(args, args.vis_folder)
+        # load geometry model
+        best_test_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
+        if os.path.isfile(best_test_name):
+            sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
+            print("=> loading checkpoint '{}'".format(best_test_name))
+            checkpoint = torch.load(best_test_name)
+            new_params = model_geo.state_dict().copy()
+            saved_state_dict = checkpoint['state_dict']
+            saved_state_dict = {k: v for k, v in saved_state_dict.items() if k in new_params}
+            # model_geo.load_state_dict(checkpoint['state_dict'])
+            new_params.update(saved_state_dict) 
+            model_geo.load_state_dict(new_params)
+            
+            
+            
 
-    mkdir_if_missing(os.path.join(args.save_path, 'example/' + args.vis_folder))
-    eval_stats = deploy(args, test_loader, test_dataset, model_seg, model_geo, vs_saver, test_gt_file, vis)
+        
+        else:
+            print("=> no checkpoint found at '{}'".format(best_test_name))
+
+        # Data loader
+        
+        # initialize visual saver
+        vs_saver = Visualizer(args, args.vis_folder)
+
+        mkdir_if_missing(os.path.join(args.save_path, 'example/' + args.vis_folder))
+        
+        print("=======>>result of input resolution W= {}, H= {}".format(args.resize_w , args.resize_h))
+        
+        test_dataset = LaneDataset(args.dataset_dir, test_gt_file, args)
+        # assign std of valid dataset to be consistent with train dataset
+        with open(ops.join(args.data_dir, 'geo_anchor_std.json')) as f:
+            anchor_std = json.load(f)
+        test_dataset.set_x_off_std(anchor_std['x_off_std'])
+        if not args.no_3d:
+            test_dataset.set_z_std(anchor_std['z_std'])
+        test_dataset.normalize_lane_label()
+        test_loader = get_loader(test_dataset, args)
+
+        eval_stats = deploy(args, test_loader, test_dataset, model_seg, model_geo, vs_saver, test_gt_file, vis)
 
 

@@ -94,6 +94,8 @@ class CamEncode(nn.Module):
 
         # Head
         endpoints['reduction_{}'.format(len(endpoints)+1)] = x
+        # print('endpoints[reduction_5]', endpoints['reduction_5'].shape)
+        # print('endpoints[reduction_4]', endpoints['reduction_4'].shape)
         x = self.up1(endpoints['reduction_5'], endpoints['reduction_4'])
         return x
 
@@ -248,7 +250,7 @@ class LiftSplatShoot(nn.Module):
 
         self.downsample = 16
         self.camC = 64
-        self.frustum_ = self.create_frustum()
+        self.frustum_ = self.create_frustum().cuda(0)
         self.D, _, _, _ = self.frustum_.shape
         self.camencode = CamEncode(self.D, self.camC, self.downsample)
         # self.bevencode = BevEncode(inC=self.camC, outC=outC, num_y_steps = self.num_y_steps)
@@ -284,7 +286,7 @@ class LiftSplatShoot(nn.Module):
         #ex frustum[0] would have xs=[1,2,3...], ys=[1,1,1,..], d=[4,4,4..]
         #ex frustum[1] would have xs=[1,2,3...], ys=[2,2,2,..], d=[4,4,4..]
         frustum = torch.stack((xs, ys, ds), -1) #each voxel or a cell is x,y, depth #as if it scans the space #stack over the highest values axis
-        return nn.Parameter(frustum, requires_grad=False)
+        return frustum#nn.Parameter(frustum, requires_grad=False)
 
     def get_geometry(self, rots, trans, intrins, post_rots, post_trans):
         """Determine the (x,y,z) locations (in the ego frame)
@@ -327,6 +329,7 @@ class LiftSplatShoot(nn.Module):
     def voxel_pooling(self, geom_feats, x):
     
         B, N, D, H, W, C = x.shape
+        # print('x.shape', x.shape)
         Nprime = B*N*D*H*W
 
         # flatten x
@@ -335,6 +338,7 @@ class LiftSplatShoot(nn.Module):
         # flatten indices
         #bound the geom_feats in the bev projected area
         geom_feats = ((geom_feats - (self.bx_ - self.dx_/2.)) / self.dx_).long()
+        # print('geom_feats.shape', geom_feats.shape)
         geom_feats = geom_feats.view(Nprime, 3)
         #batch_ix size (Nprime, 3)
         batch_ix = torch.cat([torch.full([Nprime//B, 1], ix,
