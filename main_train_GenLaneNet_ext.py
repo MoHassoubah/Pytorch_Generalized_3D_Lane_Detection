@@ -563,7 +563,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                     # P_g2gflat = np.matmul(np.linalg.inv(H_g2im), P_g2im)
                     lanelines_pred, centerlines_pred, lanelines_prob, centerlines_prob = \
                         compute_3d_lanes_all_prob(lane_anchors, dataset.anchor_dim,
-                                                  dataset.anchor_x_steps, args.anchor_y_steps, pred_hcam[j],gt_lane_anchors)
+                                                  dataset.anchor_x_steps, args.anchor_y_steps, pred_hcam[j])
                     # print('lanelines_pred', len(lanelines_pred))
                     json_line["laneLines"] = lanelines_pred #x,y,z, not offsets
                     json_line["centerLines"] = centerlines_pred

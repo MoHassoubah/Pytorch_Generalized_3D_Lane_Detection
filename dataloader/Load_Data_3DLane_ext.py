@@ -875,7 +875,7 @@ def compute_3d_lanes(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_steps, h_
     return lanelines_out, centerlines_out
 
 
-def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_steps, h_cam, gt_lanes):
+def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_steps, h_cam):
     lanelines_out = []
     lanelines_prob = []
     centerlines_out = []
