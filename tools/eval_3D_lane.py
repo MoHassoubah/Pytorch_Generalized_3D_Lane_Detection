@@ -63,7 +63,6 @@ class LaneEval(object):
         self.dist_th = 1.5
         self.ratio_th = 0.75
         self.close_range = 40
-        self.very_close_range = 20
 
     def bench(self, pred_lanes, gt_lanes, gt_visibility, raw_file, gt_cam_height, gt_cam_pitch, vis, ax1, ax2):
         """
@@ -86,14 +85,11 @@ class LaneEval(object):
 
         # change this properly
         close_range_idx = np.where(self.y_samples > self.close_range)[0][0]
-        very_close_range_idx = np.where(self.y_samples > self.very_close_range)[0][0]
 
         r_lane, p_lane = 0., 0.
         x_error_close = []
-        x_error_very_close = []
         x_error_far = []
         z_error_close = []
-        z_error_very_close = []
         z_error_far = []
 
         # only keep the visible portion
@@ -144,14 +140,10 @@ class LaneEval(object):
         num_match_mat = np.zeros((cnt_gt, cnt_pred), dtype=np.float)
         x_dist_mat_close = np.zeros((cnt_gt, cnt_pred), dtype=np.float)
         x_dist_mat_close.fill(1000.)
-        x_dist_mat_very_close = np.zeros((cnt_gt, cnt_pred), dtype=np.float)
-        x_dist_mat_very_close.fill(1000.)
         x_dist_mat_far = np.zeros((cnt_gt, cnt_pred), dtype=np.float)
         x_dist_mat_far.fill(1000.)
         z_dist_mat_close = np.zeros((cnt_gt, cnt_pred), dtype=np.float)
         z_dist_mat_close.fill(1000.)
-        z_dist_mat_very_close = np.zeros((cnt_gt, cnt_pred), dtype=np.float)
-        z_dist_mat_very_close.fill(1000.)
         z_dist_mat_far = np.zeros((cnt_gt, cnt_pred), dtype=np.float)
         z_dist_mat_far.fill(1000.)
         # compute curve to curve distance
@@ -175,26 +167,13 @@ class LaneEval(object):
 
                 # use the both visible portion to calculate distance error
                 both_visible_indices = np.logical_and(gt_visibility_mat[i, :] > 0.5, pred_visibility_mat[j, :] > 0.5)
-                
-                
-                if np.sum(both_visible_indices[:very_close_range_idx]) > 0:
-                    x_dist_mat_very_close[i, j] = np.sum(
-                        x_dist[:very_close_range_idx] * both_visible_indices[:very_close_range_idx]) / np.sum(
-                        both_visible_indices[:very_close_range_idx])
-                    z_dist_mat_very_close[i, j] = np.sum(
-                        z_dist[:very_close_range_idx] * both_visible_indices[:very_close_range_idx]) / np.sum(
-                        both_visible_indices[:very_close_range_idx])
-                else:
-                    x_dist_mat_very_close[i, j] = self.dist_th
-                    z_dist_mat_very_close[i, j] = self.dist_th
-                
-                if np.sum(both_visible_indices[very_close_range_idx:close_range_idx]) > 0:
+                if np.sum(both_visible_indices[:close_range_idx]) > 0:
                     x_dist_mat_close[i, j] = np.sum(
-                        x_dist[very_close_range_idx:close_range_idx] * both_visible_indices[very_close_range_idx:close_range_idx]) / np.sum(
-                        both_visible_indices[very_close_range_idx:close_range_idx])
+                        x_dist[:close_range_idx] * both_visible_indices[:close_range_idx]) / np.sum(
+                        both_visible_indices[:close_range_idx])
                     z_dist_mat_close[i, j] = np.sum(
-                        z_dist[very_close_range_idx:close_range_idx] * both_visible_indices[very_close_range_idx:close_range_idx]) / np.sum(
-                        both_visible_indices[very_close_range_idx:close_range_idx])
+                        z_dist[:close_range_idx] * both_visible_indices[:close_range_idx]) / np.sum(
+                        both_visible_indices[:close_range_idx])
                 else:
                     x_dist_mat_close[i, j] = self.dist_th
                     z_dist_mat_close[i, j] = self.dist_th
@@ -229,10 +208,8 @@ class LaneEval(object):
                     if num_match_mat[gt_i, pred_i] / np.sum(pred_visibility_mat[pred_i, :]) >= self.ratio_th:
                         p_lane += 1
                         match_pred_ids.append(pred_i)
-                    x_error_very_close.append(x_dist_mat_very_close[gt_i, pred_i])
                     x_error_close.append(x_dist_mat_close[gt_i, pred_i])
                     x_error_far.append(x_dist_mat_far[gt_i, pred_i])
-                    z_error_very_close.append(z_dist_mat_very_close[gt_i, pred_i])
                     z_error_close.append(z_dist_mat_close[gt_i, pred_i])
                     z_error_far.append(z_dist_mat_far[gt_i, pred_i])
 
@@ -288,7 +265,7 @@ class LaneEval(object):
                         (5, 60), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(0, 0, 1), thickness=2)
             ax1.imshow(img[:, :, [2, 1, 0]])
 
-        return r_lane, p_lane, cnt_gt, cnt_pred, x_error_very_close, x_error_close, x_error_far,  z_error_very_close, z_error_close, z_error_far
+        return r_lane, p_lane, cnt_gt, cnt_pred, x_error_close, x_error_far, z_error_close, z_error_far
 
     # compare predicted set and ground-truth set using a fixed lane probability threshold
     def bench_one_submit(self, pred_file, gt_file, prob_th=0.5, vis=False):
@@ -311,17 +288,13 @@ class LaneEval(object):
         gts = {l['raw_file']: l for l in json_gt}
 
         laneline_stats = []
-        laneline_x_error_very_close = []
         laneline_x_error_close = []
         laneline_x_error_far = []
-        laneline_z_error_very_close = []
         laneline_z_error_close = []
         laneline_z_error_far = []
         centerline_stats = []
-        centerline_x_error_very_close = []
         centerline_x_error_close = []
         centerline_x_error_far = []
-        centerline_z_error_very_close = []
         centerline_z_error_close = []
         centerline_z_error_far = []
         for i, pred in enumerate(json_pred):
@@ -359,7 +332,7 @@ class LaneEval(object):
             gt_visibility = gt['laneLines_visibility']
             # N to N matching of lanelines
             r_lane, p_lane, cnt_gt, cnt_pred, \
-            x_error_very_close, x_error_close, x_error_far, z_error_very_close,\
+            x_error_close, x_error_far, \
             z_error_close, z_error_far = self.bench(pred_lanelines,
                                                     gt_lanelines,
                                                     gt_visibility,
@@ -370,10 +343,8 @@ class LaneEval(object):
             laneline_stats.append(np.array([r_lane, p_lane, cnt_gt, cnt_pred]))
             # consider x_error z_error only for the matched lanes
             # if r_lane > 0 and p_lane > 0:
-            laneline_x_error_very_close.extend(x_error_very_close)
             laneline_x_error_close.extend(x_error_close)
             laneline_x_error_far.extend(x_error_far)
-            laneline_z_error_very_close.extend(z_error_very_close)
             laneline_z_error_close.extend(z_error_close)
             laneline_z_error_far.extend(z_error_far)
 
@@ -388,8 +359,8 @@ class LaneEval(object):
                 gt_visibility = gt['centerLines_visibility']
 
                 # N to N matching of lanelines
-                r_lane, p_lane, cnt_gt, cnt_pred, x_error_very_close,\
-                x_error_close, x_error_far, z_error_very_close,\
+                r_lane, p_lane, cnt_gt, cnt_pred, \
+                x_error_close, x_error_far, \
                 z_error_close, z_error_far = self.bench(pred_centerlines,
                                                         gt_centerlines,
                                                         gt_visibility,
@@ -400,10 +371,8 @@ class LaneEval(object):
                 centerline_stats.append(np.array([r_lane, p_lane, cnt_gt, cnt_pred]))
                 # consider x_error z_error only for the matched lanes
                 # if r_lane > 0 and p_lane > 0:
-                centerline_x_error_very_close.extend(x_error_very_close)
                 centerline_x_error_close.extend(x_error_close)
                 centerline_x_error_far.extend(x_error_far)
-                centerline_z_error_very_close.extend(z_error_very_close)
                 centerline_z_error_close.extend(z_error_close)
                 centerline_z_error_far.extend(z_error_far)
 
@@ -443,59 +412,47 @@ class LaneEval(object):
 
         output_stats = []
         laneline_stats = np.array(laneline_stats)
-        laneline_x_error_very_close = np.array(laneline_x_error_very_close)
         laneline_x_error_close = np.array(laneline_x_error_close)
         laneline_x_error_far = np.array(laneline_x_error_far)
-        laneline_z_error_very_close = np.array(laneline_z_error_very_close)
         laneline_z_error_close = np.array(laneline_z_error_close)
         laneline_z_error_far = np.array(laneline_z_error_far)
 
         R_lane = np.sum(laneline_stats[:, 0]) / (np.sum(laneline_stats[:, 2]) + 1e-6)
         P_lane = np.sum(laneline_stats[:, 1]) / (np.sum(laneline_stats[:, 3]) + 1e-6)
         F_lane = 2 * R_lane * P_lane / (R_lane + P_lane + 1e-6)
-        x_error_very_close_avg = np.average(laneline_x_error_very_close)
         x_error_close_avg = np.average(laneline_x_error_close)
         x_error_far_avg = np.average(laneline_x_error_far)
-        z_error_very_close_avg = np.average(laneline_z_error_very_close)
         z_error_close_avg = np.average(laneline_z_error_close)
         z_error_far_avg = np.average(laneline_z_error_far)
 
         output_stats.append(F_lane)
         output_stats.append(R_lane)
         output_stats.append(P_lane)
-        output_stats.append(x_error_very_close_avg)
         output_stats.append(x_error_close_avg)
         output_stats.append(x_error_far_avg)
-        output_stats.append(z_error_very_close_avg)
         output_stats.append(z_error_close_avg)
         output_stats.append(z_error_far_avg)
 
         if not self.no_centerline:
             centerline_stats = np.array(centerline_stats)
-            centerline_x_error_very_close = np.array(centerline_x_error_very_close)
             centerline_x_error_close = np.array(centerline_x_error_close)
             centerline_x_error_far = np.array(centerline_x_error_far)
-            centerline_z_error_very_close = np.array(centerline_z_error_very_close)
             centerline_z_error_close = np.array(centerline_z_error_close)
             centerline_z_error_far = np.array(centerline_z_error_far)
 
             R_lane = np.sum(centerline_stats[:, 0]) / (np.sum(centerline_stats[:, 2]) + 1e-6)
             P_lane = np.sum(centerline_stats[:, 1]) / (np.sum(centerline_stats[:, 3]) + 1e-6)
             F_lane = 2 * R_lane * P_lane / (R_lane + P_lane + 1e-6)
-            x_error_very_close_avg = np.average(centerline_x_error_very_close)
             x_error_close_avg = np.average(centerline_x_error_close)
             x_error_far_avg = np.average(centerline_x_error_far)
-            z_error_very_close_avg = np.average(centerline_z_error_very_close)
             z_error_close_avg = np.average(centerline_z_error_close)
             z_error_far_avg = np.average(centerline_z_error_far)
 
             output_stats.append(F_lane)
             output_stats.append(R_lane)
             output_stats.append(P_lane)
-            output_stats.append(x_error_very_close_avg)
             output_stats.append(x_error_close_avg)
             output_stats.append(x_error_far_avg)
-            output_stats.append(z_error_very_close_avg)
             output_stats.append(z_error_close_avg)
             output_stats.append(z_error_far_avg)
 
