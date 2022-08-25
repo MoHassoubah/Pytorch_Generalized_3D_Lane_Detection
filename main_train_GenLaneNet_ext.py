@@ -134,46 +134,46 @@ def train_net():
 
     # Train, evaluate or resume
     args.resume = first_run(args.save_path)
-    if args.resume and not args.test_mode and not args.evaluate:
-        path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
-            int(args.resume)))
-        if os.path.isfile(path):
-            log_file_name = 'log_train_start_{}.txt'.format(args.resume)
-            # Redirect stdout
-            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(path)
-            args.start_epoch = checkpoint['epoch']
-            lowest_loss = checkpoint['loss']
-            best_epoch = checkpoint['best epoch']
-            model2.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-        else:
-            log_file_name = 'log_train_start_0.txt'
-            # Redirect stdout
-            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            print("=> no checkpoint found at '{}'".format(path))
+    # if args.resume and not args.test_mode and not args.evaluate:
+        # path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
+            # int(args.resume)))
+        # if os.path.isfile(path):
+            # log_file_name = 'log_train_start_{}.txt'.format(args.resume)
+            # # Redirect stdout
+            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            # print("=> loading checkpoint '{}'".format(args.resume))
+            # checkpoint = torch.load(path)
+            # args.start_epoch = checkpoint['epoch']
+            # lowest_loss = checkpoint['loss']
+            # best_epoch = checkpoint['best epoch']
+            # model2.load_state_dict(checkpoint['state_dict'])
+            # optimizer.load_state_dict(checkpoint['optimizer'])
+            # print("=> loaded checkpoint '{}' (epoch {})"
+                  # .format(args.resume, checkpoint['epoch']))
+        # else:
+            # log_file_name = 'log_train_start_0.txt'
+            # # Redirect stdout
+            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            # print("=> no checkpoint found at '{}'".format(path))
 
-    # Only evaluate
-    elif args.evaluate:
-        best_file_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
-        if os.path.isfile(best_file_name):
-            sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
-            print("=> loading checkpoint '{}'".format(best_file_name))
-            checkpoint = torch.load(best_file_name)
-            model2.load_state_dict(checkpoint['state_dict'])
-        else:
-            print("=> no checkpoint found at '{}'".format(best_file_name))
-        mkdir_if_missing(os.path.join(args.save_path, 'example/val_vis'))
-        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model1, model2, criterion, vs_saver, val_gt_file)
-        return
+    # # Only evaluate
+    # elif args.evaluate:
+        # best_file_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
+        # if os.path.isfile(best_file_name):
+            # sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
+            # print("=> loading checkpoint '{}'".format(best_file_name))
+            # checkpoint = torch.load(best_file_name)
+            # model2.load_state_dict(checkpoint['state_dict'])
+        # else:
+            # print("=> no checkpoint found at '{}'".format(best_file_name))
+        # mkdir_if_missing(os.path.join(args.save_path, 'example/val_vis'))
+        # losses_valid, eval_stats = validate(valid_loader, valid_dataset, model1, model2, criterion, vs_saver, val_gt_file)
+        # return
 
-    # Start training from clean slate
-    else:
-        # Redirect stdout
-        sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+    # # Start training from clean slate
+    # else:
+        # # Redirect stdout
+        # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
 
     # INIT MODEL
     print(40*"="+"\nArgs:{}\n".format(args)+40*"=")
@@ -224,22 +224,22 @@ def train_net():
             # Run model
             optimizer.zero_grad()
             # Inference model
-            try:
-                output1 = model1(input, no_lane_exist=True)
-                with torch.no_grad():
-                    # output1 = F.softmax(output1, dim=1)
-                    output1 = output1.softmax(dim=1)
-                    output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
-                # pred = output1.data.cpu().numpy()[0, 1:, :, :]
-                # pred = np.max(pred, axis=0)
-                # cv2.imshow('check probmap', pred)
-                # cv2.waitKey()
-                output1 = output1[:, 1:, :, :]
-                output_net, pred_hcam, pred_pitch = model2(output1)
-            except RuntimeError as e:
-                print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
-                print(e)
-                continue
+            # try:
+            output1 = model1(input, no_lane_exist=True)
+            with torch.no_grad():
+                # output1 = F.softmax(output1, dim=1)
+                output1 = output1.softmax(dim=1)
+                output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
+            # pred = output1.data.cpu().numpy()[0, 1:, :, :]
+            # pred = np.max(pred, axis=0)
+            # cv2.imshow('check probmap', pred)
+            # cv2.waitKey()
+            output1 = output1[:, 1:, :, :]
+            output_net, pred_hcam, pred_pitch = model2(output1)
+            # except RuntimeError as e:
+                # print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
+                # print(e)
+                # continue
 
             # Compute losses on
             loss = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
@@ -300,7 +300,7 @@ def train_net():
             writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
             writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
-        total_score = losses.avg
+        total_score = losses_valid#losses.avg
 
         # Adjust learning_rate if loss plateaued
         if args.lr_policy == 'plateau':
@@ -352,17 +352,17 @@ def validate(loader, dataset, model1, model2, criterion, vs_saver, val_gt_file, 
                 if not args.fix_cam and not args.pred_cam:
                     model2.update_projection(args, gt_hcam, gt_pitch)
                 # Inference model
-                try:
-                    output1 = model1(input, no_lane_exist=True)
-                    # output1 = F.softmax(output1, dim=1)
-                    output1 = output1.softmax(dim=1)
-                    output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
-                    output1 = output1[:, 1:, :, :]
-                    output_net, pred_hcam, pred_pitch = model2(output1)
-                except RuntimeError as e:
-                    print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
-                    print(e)
-                    continue
+                # try:
+                output1 = model1(input, no_lane_exist=True)
+                # output1 = F.softmax(output1, dim=1)
+                output1 = output1.softmax(dim=1)
+                output1 = output1 / torch.max(torch.max(output1, dim=2, keepdim=True)[0], dim=3, keepdim=True)[0]
+                output1 = output1[:, 1:, :, :]
+                output_net, pred_hcam, pred_pitch = model2(output1)
+                # except RuntimeError as e:
+                    # print("Batch with idx {} skipped due to inference error".format(idx.numpy()))
+                    # print(e)
+                    # continue
 
                 # Compute losses on parameters or segmentation
                 loss = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
@@ -388,7 +388,7 @@ def validate(loader, dataset, model1, model2, criterion, vs_saver, val_gt_file, 
                 # Plot curves in two views
                 if (i + 1) % args.save_freq == 0 or args.evaluate:
                     vs_saver.save_result_new(dataset, 'valid', epoch, i, idx,
-                                             input, gt, output_net, pred_pitch, pred_hcam, evaluate=args.evaluate)
+                                             input, gt, output_net, pred_pitch, pred_hcam, evaluate=False)#args.evaluate)
 
                 # write results and evaluate
                 for j in range(num_el):
@@ -463,7 +463,7 @@ if __name__ == '__main__':
 
     # dataset_name: 'standard' / 'rare_subset' / 'illus_chg'
     args.dataset_name = 'illus_chg'
-    args.dataset_dir = '/media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
+    args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
     args.data_dir = ops.join('data_splits', args.dataset_name)
     args.save_path = ops.join('data_splits', args.dataset_name)
 
@@ -483,7 +483,8 @@ if __name__ == '__main__':
     crit_string = 'loss_gflat'
 
     # for the case only running evaluation
-    args.evaluate = False
+    args.evaluate = True
+    args.nepochs=300
 
     # settings for save and visualize
     args.print_freq = 50

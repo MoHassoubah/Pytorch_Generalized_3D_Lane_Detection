@@ -19,10 +19,13 @@ class DownsamplerBlock (nn.Module):
         super().__init__()
 
         self.conv = nn.Conv2d(ninput, noutput-ninput, (3, 3), stride=2, padding=1, bias=True)
-        self.pool = nn.MaxPool2d(2, stride=2)
+        self.pool = nn.MaxPool2d(3, stride=2, padding=1)
         self.bn = nn.BatchNorm2d(noutput, eps=1e-3)
 
     def forward(self, input):
+        # print('input',input.shape)
+        # print('self.conv(input)',self.conv(input).shape)
+        # print('self.pool(input)',self.pool(input).shape)
         output = torch.cat([self.conv(input), self.pool(input)], 1)
         output = self.bn(output)
         return F.relu(output)
