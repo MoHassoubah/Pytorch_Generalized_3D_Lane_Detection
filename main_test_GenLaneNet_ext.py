@@ -152,12 +152,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # manual settings
-    args.dataset_dir = './media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
-    args.dataset_name = 'illus_chg'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
+    args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
+    args.dataset_name = 'standard'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
     args.mod = 'Gen_LaneNet_ext'  # model name
     test_name = 'test'  # test set name
     pretrained_feat_model = 'pretrained/erfnet_model_sim3d.tar'
-    vis = False  # choose to save visualization result
+    vis = True  # choose to save visualization result
 
     # generate relative paths
     args.data_dir = ops.join('data_splits', args.dataset_name)
@@ -183,6 +183,8 @@ if __name__ == '__main__':
     # Define network
     model_seg = erfnet.ERFNet(2)  # 2-class model
     # model_geo = GeoNet3D_ext.Net(args)
+    
+    args.no_centerline = True
     
     #####################################
     #####################################
@@ -223,7 +225,7 @@ if __name__ == '__main__':
     ##############
     
     
-    resolution_ratio = [0.3,0.25,0.22,0.15,0.1]
+    resolution_ratio = [0.25] #[0.3,0.25,0.22,0.15,0.1]
     H=1080
     W=1920
     

@@ -214,7 +214,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # manual settings
-    args.dataset_dir = '/media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
+    args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
     args.dataset_name = 'illus_chg'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
     args.mod = '3D_LaneNet'  # model name
     test_name = 'test'  # test set name

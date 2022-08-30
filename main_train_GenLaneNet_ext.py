@@ -83,7 +83,7 @@ def train_net():
     valid_dataset.normalize_lane_label()
     args.batch_size = 8
     valid_loader = get_loader(valid_dataset, args)
-    args.batch_size = 6
+    args.batch_size = 4
 
     # extract valid set labels for evaluation later
     global valid_set_labels
@@ -133,7 +133,7 @@ def train_net():
     H=1080
     W=1920
     resize_lim=(0.193, 0.225)
-    final_dim= (270, 480) #(128, 352)
+    final_dim= (args.resize_h, args.resize_w) #(128, 352)
     bot_pct_lim=(0.0, 0.22)
     rot_lim=(-5.4, 5.4)
     rand_flip=True
@@ -241,7 +241,7 @@ def train_net():
 
     # Logging setup
     best_epoch = 0
-    lowest_loss = np.inf
+    lowest_loss = 0#np.inf
     log_file_name = 'log_train_start_0.txt'
 
     # Tensorboard writer
@@ -255,21 +255,21 @@ def train_net():
     # Train, evaluate or resume
     args.resume = first_run(args.save_path)
     # if args.resume and not args.test_mode and not args.evaluate:
-        # path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
-            # int(args.resume)))
-        # if os.path.isfile(path):
-            # log_file_name = 'log_train_start_{}.txt'.format(args.resume)
-            # # Redirect stdout
-            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            # print("=> loading checkpoint '{}'".format(args.resume))
-            # checkpoint = torch.load(path)
-            # args.start_epoch = checkpoint['epoch']
-            # lowest_loss = checkpoint['loss']
-            # best_epoch = checkpoint['best epoch']
-            # model2.load_state_dict(checkpoint['state_dict'])
-            # optimizer.load_state_dict(checkpoint['optimizer'])
-            # print("=> loaded checkpoint '{}' (epoch {})"
-                  # .format(args.resume, checkpoint['epoch']))
+    path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
+        int(84)))
+    if os.path.isfile(path):
+        log_file_name = 'log_train_start_{}.txt'.format(args.resume)
+        # Redirect stdout
+        sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+        print("=> loading checkpoint '{}'".format(args.resume))
+        checkpoint = torch.load(path)
+        args.start_epoch = checkpoint['epoch']
+        lowest_loss = checkpoint['loss']
+        best_epoch = checkpoint['best epoch']
+        model.load_state_dict(checkpoint['state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        print("=> loaded checkpoint '{}' (epoch {})"
+              .format(args.resume, checkpoint['epoch']))
         # else:
             # log_file_name = 'log_train_start_0.txt'
             # # Redirect stdout
@@ -426,9 +426,9 @@ def train_net():
         print("===> Evaluation laneline F-measure: {:3f}".format(eval_stats[0]))
         print("===> Evaluation laneline Recall: {:3f}".format(eval_stats[1]))
         print("===> Evaluation laneline Precision: {:3f}".format(eval_stats[2]))
-        print("===> Evaluation centerline F-measure: {:3f}".format(eval_stats[7]))
-        print("===> Evaluation centerline Recall: {:3f}".format(eval_stats[8]))
-        print("===> Evaluation centerline Precision: {:3f}".format(eval_stats[9]))
+        print("===> Evaluation centerline F-measure: {:3f}".format(eval_stats[9]))
+        print("===> Evaluation centerline Recall: {:3f}".format(eval_stats[10]))
+        print("===> Evaluation centerline Precision: {:3f}".format(eval_stats[11]))
 
         print("===> Last best {}-loss was {:.8f} in epoch {}".format(crit_string, lowest_loss, best_epoch))
 
@@ -436,8 +436,8 @@ def train_net():
             writer.add_scalars('3D-Lane-Loss', {'Training': losses.avg}, epoch)
             writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
-            writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
-        total_score = losses_valid #losses.avg
+            writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[9]}, epoch)
+        total_score = eval_stats[0]#losses_valid #losses.avg
 
         # Adjust learning_rate if loss plateaued
         # if args.lr_policy == 'plateau':
@@ -450,7 +450,7 @@ def train_net():
             f.write(str(epoch))
         # Save model
         to_save = False
-        if total_score < lowest_loss:
+        if total_score > lowest_loss:
             to_save = True
             best_epoch = epoch+1
             lowest_loss = total_score
@@ -575,11 +575,11 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                   "centerline z error (close)  {:.8} m\n"
                   "centerline z error (far)  {:.8} m\n".format(eval_stats[0], eval_stats[1],
                                                                eval_stats[2], eval_stats[3],
-                                                               eval_stats[4], eval_stats[5],
-                                                               eval_stats[6], eval_stats[7],
+                                                               eval_stats[5], eval_stats[6],
                                                                eval_stats[8], eval_stats[9],
                                                                eval_stats[10], eval_stats[11],
-                                                               eval_stats[12], eval_stats[13]))
+                                                               eval_stats[12], eval_stats[14],
+                                                               eval_stats[15], eval_stats[17]))
 
         return losses.avg, eval_stats
 
@@ -611,7 +611,7 @@ if __name__ == '__main__':
 
     # dataset_name: 'standard' / 'rare_subset' / 'illus_chg'
     args.dataset_name = 'illus_chg'
-    args.dataset_dir = './media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
+    args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
     args.data_dir = ops.join('data_splits', args.dataset_name)
     args.save_path = ops.join('data_splits', args.dataset_name)
 
@@ -623,7 +623,7 @@ if __name__ == '__main__':
     args.prob_th = 0.5
     
     args.nepochs = 300
-    args.batch_size = 6
+    args.batch_size = 4
 
     # define the network model
     args.num_class = 2  # 1 background + n lane labels

@@ -99,7 +99,7 @@ def train_net():
 
     # Logging setup
     best_epoch = 0
-    lowest_loss = np.inf
+    lowest_loss = 0#np.inf
     log_file_name = 'log_train_start_0.txt'
 
     # Tensorboard writer
@@ -112,46 +112,46 @@ def train_net():
 
     # Train, evaluate or resume
     args.resume = first_run(args.save_path)
-    if args.resume and not args.test_mode and not args.evaluate:
-        path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
-            int(args.resume)))
-        if os.path.isfile(path):
-            log_file_name = 'log_train_start_{}.txt'.format(args.resume)
-            # Redirect stdout
-            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(path)
-            args.start_epoch = checkpoint['epoch']
-            lowest_loss = checkpoint['loss']
-            best_epoch = checkpoint['best epoch']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
-        else:
-            log_file_name = 'log_train_start_0.txt'
-            # Redirect stdout
-            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            print("=> no checkpoint found at '{}'".format(path))
+    # if args.resume and not args.test_mode and not args.evaluate:
+        # path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
+            # int(args.resume)))
+        # if os.path.isfile(path):
+            # log_file_name = 'log_train_start_{}.txt'.format(args.resume)
+            # # Redirect stdout
+            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            # print("=> loading checkpoint '{}'".format(args.resume))
+            # checkpoint = torch.load(path)
+            # args.start_epoch = checkpoint['epoch']
+            # lowest_loss = checkpoint['loss']
+            # best_epoch = checkpoint['best epoch']
+            # model.load_state_dict(checkpoint['state_dict'])
+            # optimizer.load_state_dict(checkpoint['optimizer'])
+            # print("=> loaded checkpoint '{}' (epoch {})"
+                  # .format(args.resume, checkpoint['epoch']))
+        # else:
+            # log_file_name = 'log_train_start_0.txt'
+            # # Redirect stdout
+            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            # print("=> no checkpoint found at '{}'".format(path))
 
-    # Only evaluate
-    elif args.evaluate:
-        best_file_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
-        if os.path.isfile(best_file_name):
-            sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
-            print("=> loading checkpoint '{}'".format(best_file_name))
-            checkpoint = torch.load(best_file_name)
-            model.load_state_dict(checkpoint['state_dict'])
-        else:
-            print("=> no checkpoint found at '{}'".format(best_file_name))
-        mkdir_if_missing(os.path.join(args.save_path, 'example/val_vis'))
-        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model, criterion, vs_saver, val_gt_file)
-        return
+    # # Only evaluate
+    # elif args.evaluate:
+        # best_file_name = glob.glob(os.path.join(args.save_path, 'model_best*'))[0]
+        # if os.path.isfile(best_file_name):
+            # sys.stdout = Logger(os.path.join(args.save_path, 'Evaluate.txt'))
+            # print("=> loading checkpoint '{}'".format(best_file_name))
+            # checkpoint = torch.load(best_file_name)
+            # model.load_state_dict(checkpoint['state_dict'])
+        # else:
+            # print("=> no checkpoint found at '{}'".format(best_file_name))
+        # mkdir_if_missing(os.path.join(args.save_path, 'example/val_vis'))
+        # losses_valid, eval_stats = validate(valid_loader, valid_dataset, model, criterion, vs_saver, val_gt_file)
+        # return
 
-    # Start training from clean slate
-    else:
-        # Redirect stdout
-        sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+    # # Start training from clean slate
+    # else:
+        # # Redirect stdout
+        # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
 
     # INIT MODEL
     print(40*"="+"\nArgs:{}\n".format(args)+40*"=")
@@ -274,7 +274,7 @@ def train_net():
             else:
                 writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
                 writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
-        total_score = losses.avg
+        total_score = eval_stats[0]#losses.avg
 
         # Adjust learning_rate if loss plateaued
         if args.lr_policy == 'plateau':
@@ -287,7 +287,7 @@ def train_net():
             f.write(str(epoch))
         # Save model
         to_save = False
-        if total_score < lowest_loss:
+        if total_score > lowest_loss:
             to_save = True
             best_epoch = epoch+1
             lowest_loss = total_score
@@ -357,7 +357,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                 # Plot curves in two views
                 if (i + 1) % args.save_freq == 0 or args.evaluate:
                     vs_saver.save_result(dataset, 'valid', epoch, i, idx,
-                                         input, gt, output_net, pred_pitch, pred_hcam, evaluate=args.evaluate)
+                                         input, gt, output_net, pred_pitch, pred_hcam, evaluate=False)#, evaluate=args.evaluate)
 
                 # write results and evaluate
                 for j in range(num_el):
@@ -442,7 +442,7 @@ if __name__ == '__main__':
 
     # dataset_name: 'standard' / 'rare_subset' / 'illus_chg'
     args.dataset_name = 'illus_chg'
-    args.dataset_dir = '/media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
+    args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
     args.data_dir = ops.join('data_splits', args.dataset_name)
     args.save_path = ops.join('data_splits', args.dataset_name)
 
@@ -464,7 +464,8 @@ if __name__ == '__main__':
     crit_string = 'loss_3D'
 
     # for the case only running evaluation
-    args.evaluate = False
+    args.evaluate = True
+    args.nepochs=300
 
     # settings for save and visualize
     args.print_freq = 50
