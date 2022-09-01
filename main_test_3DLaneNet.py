@@ -193,7 +193,7 @@ def deploy(args, loader, dataset, model, vs_saver, test_gt_file, lane_pred_file,
             # max_f_prob = eval_stats_pr['max_F_prob_th']
 
             # evaluate at the point with max F-measure. Additional eval of position error.
-            eval_stats = evaluator.bench_one_submit(lane_pred_file, test_gt_file, prob_th=max_f_prob)
+            eval_stats = evaluator.bench_one_submit(lane_pred_file, test_gt_file)#, prob_th=max_f_prob)
 
             print("Metrics: AP, F-score, x error (close), x error (far), z error (close), z error (far)")
             print(
