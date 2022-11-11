@@ -18,6 +18,7 @@ import torchvision.transforms.functional as F
 from tools.utils import *
 warnings.simplefilter('ignore', np.RankWarning)
 matplotlib.use('Agg')
+import math
 
 
 def get_rot(h):
@@ -338,11 +339,17 @@ class LaneDataset(Dataset):
                     # A GT lane can be either 2D or 3D
                     # if a GT lane is 3D, the height is intact from 3D GT, so keep it intact here too
                     lane = np.array(lane)
+
+# ##################################
+#                     if np.mean(np.sqrt(np.sum(np.diff(lane, axis=0)**2,1)))>1.5:
+#                         print(np.mean(np.sqrt(np.sum(np.diff(lane, axis=0)**2,1))))
+# ##################################
+
                     # print('lane', lane.shape)
                     # print('0lane pnts', lane[:4])
                     gt_lane_pts[i] = lane
                     gt_lane_visibility[i] = np.array(gt_lane_visibility[i])
-                gt_laneline_pts_all.append(gt_lane_pts) # append the whole image
+                gt_laneline_pts_all.append(gt_lane_pts) # append the whole image # carries all images
                 gt_laneline_visibility_all.append(gt_lane_visibility)
 
                 if not self.no_centerline:
@@ -382,12 +389,14 @@ class LaneDataset(Dataset):
             gt_cam_height = gt_cam_height_all[idx]
             gt_cam_pitch = gt_cam_pitch_all[idx]
             if not self.fix_cam:
-                P_g2im = projection_g2im(gt_cam_pitch, gt_cam_height, self.K)
-                H_g2im = homograpthy_g2im(gt_cam_pitch, gt_cam_height, self.K)
-                H_im2g = np.linalg.inv(H_g2im)
+                P_g2im = projection_g2im(gt_cam_pitch, gt_cam_height, self.K) # from 3d real coord to image
+                H_g2im = homograpthy_g2im(gt_cam_pitch, gt_cam_height, self.K) 
+                H_im2g = np.linalg.inv(H_g2im) # from image to flat ground
             else:
                 P_g2im = self.P_g2im
                 H_im2g = self.H_im2g
+            #want to go from 3d to image then image to flat
+            #P_g2im multiplied by [x,y,z,1] (3d coord) gives image, then image coord multi by H_im2g to give g_flat (z=0)
             P_g2gflat = np.matmul(H_im2g, P_g2im)
 
             gt_lanes = gt_laneline_pts_all[idx]
@@ -406,6 +415,7 @@ class LaneDataset(Dataset):
             gt_anchors = []
             ass_ids = []
             visibility_vectors = []
+            # gt_anchors carries all the lanes in the image here -> one image
             for i in range(len(gt_lanes)):
 
                 # convert gt label to anchor label
@@ -416,6 +426,7 @@ class LaneDataset(Dataset):
                     ass_ids.append(ass_id)
                     visibility_vectors.append(visibility_vec)
 
+            #one image gt_anchors is added to the lane_x_off_all,...
             for i in range(len(gt_anchors)):
                 lane_x_off_all.append(gt_anchors[i][:, 0])
                 lane_z_all.append(gt_anchors[i][:, 1])
@@ -462,10 +473,13 @@ class LaneDataset(Dataset):
                 gt_centerline_pts_all[idx] = gt_anchors
                 gt_centerline_visibility_all[idx] = visibility_vectors
 
+        #after collecting data for all images
+        
         lane_x_off_all = np.array(lane_x_off_all)
         lane_y_off_all = np.array(lane_y_off_all)
         lane_z_all = np.array(lane_z_all)
         visibility_all_flat = np.array(visibility_all_flat)
+        
 
         # computed weighted std based on visibility
         lane_x_off_std = np.sqrt(np.average(lane_x_off_all**2, weights=visibility_all_flat, axis=0))
