@@ -808,25 +808,26 @@ class Visualizer:
                 ax6.set_ylim(0, 100)
                 ax6.set_zlim(min(bottom, -1), max(top, 1))
             elif self.no_centerline and not self.no_3d:
-                fig = plt.figure()
-                ax1 = fig.add_subplot(131)
-                ax2 = fig.add_subplot(132)
-                ax3 = fig.add_subplot(133, projection='3d')
+                fig = plt.figure()#(figsize=[15,14])
+                ax = fig.add_gridspec(4, 4)
+                ax1 = fig.add_subplot(ax[0:, 0:-1])#fig.add_subplot(121)
+                ax2 = fig.add_subplot(ax[0:, -1])#fig.add_subplot(122)
+                # ax3 = fig.add_subplot(133, projection='3d')
                 # ax4 = fig.add_subplot(234)
                 # ax5 = fig.add_subplot(235)
                 # ax6 = fig.add_subplot(236, projection='3d')
                 ax1.imshow(im_laneline)
-                ax2.imshow(ipm_laneline)
-                # TODO:use separate gt_cam_height when ready
-                self.draw_3d_curves_new(ax3, gt_anchors, pred_cam_height[i], 'laneline', [0, 0, 1])
-                self.draw_3d_curves_new(ax3, pred_anchors, pred_cam_height[i], 'laneline', [1, 0, 0])
-                ax3.set_xlabel('x axis')
-                ax3.set_ylabel('y axis')
-                ax3.set_zlabel('z axis')
-                bottom, top = ax3.get_zlim()
-                ax3.set_xlim(-20, 20)
-                ax3.set_ylim(0, 100)
-                ax3.set_zlim(min(bottom, -1), max(top, 1))
+                ax2.imshow(ipm_laneline,extent=(0,128,0,208))#origin='lower')
+                # # TODO:use separate gt_cam_height when ready
+                # self.draw_3d_curves_new(ax3, gt_anchors, pred_cam_height[i], 'laneline', [0, 0, 1])
+                # self.draw_3d_curves_new(ax3, pred_anchors, pred_cam_height[i], 'laneline', [1, 0, 0])
+                # ax3.set_xlabel('x axis')
+                # ax3.set_ylabel('y axis')
+                # ax3.set_zlabel('z axis')
+                # bottom, top = ax3.get_zlim()
+                # ax3.set_xlim(-20, 20)
+                # ax3.set_ylim(0, 100)
+                # ax3.set_zlim(min(bottom, -1), max(top, 1))
                 # ax4.imshow(im_centerline)
                 # ax5.imshow(ipm_centerline)
                 # # TODO:use separate gt_cam_height when ready
@@ -844,7 +845,7 @@ class Visualizer:
                 fig.savefig(self.save_path + '/example/' + self.vis_folder + '/infer_{}'.format(idx[i]))
             else:
                 fig.savefig(self.save_path + '/example/{}/epoch-{}_batch-{}_idx-{}'.format(train_or_val,
-                                                                                           epoch, batch_i, idx[i]))
+                                                                                           epoch, batch_i, idx[i]), bbox_inches='tight', pad_inches=0.5)
             plt.clf()
             plt.close(fig)
 
@@ -977,6 +978,7 @@ def homography_ipmnorm2g(top_view_region):
 
 def homograpthy_g2im(cam_pitch, cam_height, K):
     # transform top-view region to original image region
+    # as if np.concatenate([R_g2c[:, 0:>>3<<], [[0], [cam_height], [0]]], 1)) multiplied by [x,y,0,1].Transpose
     R_g2c = np.array([[1, 0, 0],
                       [0, np.cos(np.pi / 2 + cam_pitch), -np.sin(np.pi / 2 + cam_pitch)],
                       [0, np.sin(np.pi / 2 + cam_pitch), np.cos(np.pi / 2 + cam_pitch)]])
