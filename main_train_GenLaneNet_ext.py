@@ -175,6 +175,7 @@ def train_net():
     # the grid conf is kind of important
     # num_y_steps defines the size of the the output
     model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K)
+    # define_init_weights(model, args.weight_init)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     #calculate the number of parameters
     print('total number of parameters>>>', pytorch_total_params)
@@ -236,12 +237,12 @@ def train_net():
     if not args.no_cuda:
         criterion = criterion.cuda(0)
         
-        # criterion_val = criterion_val.cuda(0)
+        criterion_val = criterion_val.cuda(0)
         
 
     # Logging setup
     best_epoch = 0
-    lowest_loss = np.inf
+    lowest_loss = 0#np.inf
     log_file_name = 'log_train_start_0.txt'
 
     # Tensorboard writer
@@ -254,27 +255,27 @@ def train_net():
 
     # Train, evaluate or resume
     args.resume = first_run(args.save_path)
-    # if args.resume and not args.test_mode and not args.evaluate:
-        # path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
-            # int(args.resume)))
-        # if os.path.isfile(path):
-            # log_file_name = 'log_train_start_{}.txt'.format(args.resume)
-            # # Redirect stdout
-            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            # print("=> loading checkpoint '{}'".format(args.resume))
-            # checkpoint = torch.load(path)
-            # args.start_epoch = checkpoint['epoch']
-            # lowest_loss = checkpoint['loss']
-            # best_epoch = checkpoint['best epoch']
-            # model2.load_state_dict(checkpoint['state_dict'])
-            # optimizer.load_state_dict(checkpoint['optimizer'])
-            # print("=> loaded checkpoint '{}' (epoch {})"
-                  # .format(args.resume, checkpoint['epoch']))
-        # else:
-            # log_file_name = 'log_train_start_0.txt'
-            # # Redirect stdout
-            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            # print("=> no checkpoint found at '{}'".format(path))
+    # if args.resume and not args.test_mode: #and not args.evaluate:
+    #     path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
+    #         int(args.resume)))
+    #     if os.path.isfile(path):
+    #         log_file_name = 'log_train_start_{}.txt'.format(args.resume)
+    #         # Redirect stdout
+    #         sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+    #         print("=> loading checkpoint '{}'".format(args.resume))
+    #         checkpoint = torch.load(path)
+    #         args.start_epoch = checkpoint['epoch']
+    #         lowest_loss = checkpoint['loss']
+    #         best_epoch = checkpoint['best epoch']
+    #         model.load_state_dict(checkpoint['state_dict'])
+    #         optimizer.load_state_dict(checkpoint['optimizer'])
+    #         print("=> loaded checkpoint '{}' (epoch {})"
+    #               .format(args.resume, checkpoint['epoch']))
+    #     else:
+    #         log_file_name = 'log_train_start_0.txt'
+    #         # Redirect stdout
+    #         sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+    #         print("=> no checkpoint found at '{}'".format(path))
 
     # # Only evaluate
     # elif args.evaluate:
@@ -419,7 +420,7 @@ def train_net():
                 vs_saver.save_result_new(train_dataset, 'train', epoch, i, idx,
                                          input, gt, output_net, pred_pitch, pred_hcam, aug_mat)
 
-        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model, criterion, vs_saver, val_gt_file, epoch)
+        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model, criterion_val, vs_saver, val_gt_file, epoch)
 
         print("===> Average {}-loss on training set is {:.8f}".format(crit_string, losses.avg))
         print("===> Average {}-loss on validation set is {:.8f}".format(crit_string, losses_valid))
@@ -437,7 +438,7 @@ def train_net():
             writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
             writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
-        total_score = losses_valid #losses.avg
+        total_score = eval_stats[0]#losses_valid #losses.avg
 
         # Adjust learning_rate if loss plateaued
         # if args.lr_policy == 'plateau':
@@ -450,7 +451,7 @@ def train_net():
             f.write(str(epoch))
         # Save model
         to_save = False
-        if total_score < lowest_loss:
+        if total_score > lowest_loss:
             to_save = True
             best_epoch = epoch+1
             lowest_loss = total_score
@@ -611,7 +612,7 @@ if __name__ == '__main__':
 
     # dataset_name: 'standard' / 'rare_subset' / 'illus_chg'
     args.dataset_name = 'illus_chg'
-    args.dataset_dir = './media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
+    args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'
     args.data_dir = ops.join('data_splits', args.dataset_name)
     args.save_path = ops.join('data_splits', args.dataset_name)
 
@@ -624,15 +625,15 @@ if __name__ == '__main__':
     
     args.nepochs = 300
     args.batch_size = 6
-
+    
     # define the network model
     args.num_class = 2  # 1 background + n lane labels
     args.pretrained_feat_model = 'pretrained/erfnet_model_sim3d.tar'
     args.mod = 'Gen_LaneNet_ext'
     args.y_ref = 5  # new anchor prefer closer range gt assign
     global crit_string
-    crit_string = 'loss_gflat' #'loss_gflat_3D'#'loss_gflat'
-
+    crit_string = 'loss_gflat_3D'#'loss_gflat'
+    # args.resume = True
     # for the case only running evaluation
     args.evaluate = True#False
 

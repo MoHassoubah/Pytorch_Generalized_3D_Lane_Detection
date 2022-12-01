@@ -36,7 +36,7 @@ def make_3d_layers(cfg, in_channels=3, batch_norm=False):
             if batch_norm:
                 layers += [conv3d, nn.BatchNorm3d(v), nn.ReLU(inplace=True)]
             else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
+                layers += [conv3d, nn.ReLU(inplace=True)]
             in_channels = v
     return nn.Sequential(*layers)
 

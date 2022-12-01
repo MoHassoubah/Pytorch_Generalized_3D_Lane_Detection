@@ -334,7 +334,7 @@ class LaneDataset(Dataset):
                     lane_x_off_all.append(x_off_values)
                     lane_z_all.append(z_values)
             gt_laneline_ass_ids.append(ass_ids)
-            gt_laneline_pts_all[idx] = gt_anchors
+            gt_laneline_pts_all[idx] = gt_anchors #gt_anchors is list where each elm is 2 np.array of x,z offsets for each lane in the image
 
             if not self.no_centerline:
                 gt_lanes = gt_centerline_pts_all[idx]
