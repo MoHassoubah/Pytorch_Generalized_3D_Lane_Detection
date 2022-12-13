@@ -283,8 +283,8 @@ class Laneline_loss_gflat_3D(nn.Module):
             (torch.ones_like(gt_class) - gt_class) *
             torch.log(torch.ones_like(pred_class) - pred_class + torch.tensor(1e-9)))
         # applying L1 norm does not need to separate X and Z
-        # loss2 = torch.sum(
-        #     torch.norm(gt_class*torch.cat((gt_visibility, gt_visibility), 3)*(pred_anchors-gt_anchors), p=1, dim=3))
+        loss2 = torch.sum(
+            torch.norm(gt_class*torch.cat((gt_visibility, gt_visibility), 3)*(pred_anchors-gt_anchors), p=1, dim=3))
 
         # compute loss in real 3D X, Y space, the transformation considers offset to anchor and normalization by std
         pred_Xoff_g = pred_anchors[:, :, :, :self.num_y_steps]
@@ -298,15 +298,15 @@ class Laneline_loss_gflat_3D(nn.Module):
         pred_Yoff = -pred_Z * self.z_std / pred_hcam * self.anchor_y_tensor
         gt_Xoff = (1 - gt_Z * self.z_std / gt_hcam) * gt_Xoff_g - gt_Z * self.z_std / gt_hcam * self.anchor_x_tensor
         gt_Yoff = -gt_Z * self.z_std / gt_hcam * self.anchor_y_tensor
-        loss3 = torch.sum(
-            torch.norm(
-                gt_class * torch.cat((gt_visibility, gt_visibility), 3) *
-                (torch.cat((pred_Xoff, pred_Yoff), 3) - torch.cat((gt_Xoff, gt_Yoff), 3)), p=1, dim=3))
+        # loss3 = torch.sum(
+        #     torch.norm(
+        #         gt_class * torch.cat((gt_visibility, gt_visibility), 3) *
+        #         (torch.cat((pred_Xoff, pred_Yoff), 3) - torch.cat((gt_Xoff, gt_Yoff), 3)), p=1, dim=3))
 
         loss5 = self.calParrallelismLoss(pred_Xoff, pred_Yoff, pred_Z, gt_class, gt_visibility)
 
         # if not self.pred_cam:
-        return loss0+loss1+loss3 + loss5 #+loss2
+        return loss0+loss1+loss2 + loss5 #+loss3
         # loss4 = torch.sum(torch.abs(gt_pitch-pred_pitch)) + torch.sum(torch.abs(gt_hcam-pred_hcam))
         # return loss0+loss1+loss3+loss4+loss5 #+loss2
 
