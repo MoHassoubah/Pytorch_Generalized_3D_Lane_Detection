@@ -120,6 +120,10 @@ def define_args():
     parser.add_argument('--resume', type=str, default='', help='resume latest saved run')
     parser.add_argument('--vgg_mean', type=float, default=[0.485, 0.456, 0.406], help='Mean of rgb used in pretrained model on ImageNet')
     parser.add_argument('--vgg_std', type=float, default=[0.229, 0.224, 0.225], help='Std of rgb used in pretrained model on ImageNet')
+    parser.add_argument('--feature_channels', type=int, default=128, help='number of channels after encoder')
+    parser.add_argument('--num_proj', type=int, default=4, help='number of projection layers')
+    parser.add_argument('--S', type=int, default=72, help='max sample number in img height')
+    parser.add_argument('--anchor_feat_channels', type=int, default=64, help='number of anchor feature channels')
     # Optimizer settings
     parser.add_argument('--optimizer', type=str, default='adam', help='adam or sgd')
     parser.add_argument('--weight_init', type=str, default='xavier', help='normal, xavier, kaiming, orhtogonal weights initialisation')

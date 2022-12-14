@@ -10,6 +10,7 @@ from efficientnet_pytorch import EfficientNet
 from torchvision.models.resnet import resnet18
 
 from tools.utils import gen_dx_bx, cumsum_trick, QuickCumsum
+import Lane2D
 
 
 def make_layers(cfg, in_channels=3, batch_norm=False):
@@ -79,14 +80,14 @@ class CamEncode(nn.Module):
         return x.softmax(dim=1)
 
     def get_depth_feat(self, x):
-        x = self.get_eff_depth(x)
+        x, encoder_feat = self.get_eff_depth(x)
         # Depth
         x = self.depthnet(x)
 
         depth = self.get_depth_dist(x[:, :self.D])
         new_x = depth.unsqueeze(1) * x[:, self.D:(self.D + self.C)].unsqueeze(2)
 
-        return depth, new_x
+        return depth, new_x, encoder_feat
 
     def get_eff_depth(self, x):
         # adapted from https://github.com/lukemelas/EfficientNet-PyTorch/blob/master/efficientnet_pytorch/model.py#L231
@@ -95,6 +96,7 @@ class CamEncode(nn.Module):
         # Stem
         x = self.trunk._swish(self.trunk._bn0(self.trunk._conv_stem(x)))
         prev_x = x
+        encoder_feat = x
 
         # Blocks
         for idx, block in enumerate(self.trunk._blocks):
@@ -111,12 +113,12 @@ class CamEncode(nn.Module):
         # print('endpoints[reduction_5]', endpoints['reduction_5'].shape)
         # print('endpoints[reduction_4]', endpoints['reduction_4'].shape)
         x = self.up1(endpoints['reduction_5'], endpoints['reduction_4'])
-        return x
+        return x, encoder_feat
 
     def forward(self, x):
-        depth, x = self.get_depth_feat(x)
+        depth, x, encoder_feat = self.get_depth_feat(x)
 
-        return x
+        return x, encoder_feat
 
 
 def make_one_layer(in_channels, out_channels, kernel_size=3, padding=1, stride=1, batch_norm=False):
@@ -306,7 +308,7 @@ class Lane3DPredictionHead(nn.Module):
 
 
 class LiftSplatShoot(nn.Module):
-    def __init__(self, grid_conf, data_aug_conf, outC, num_y_steps, intrins):
+    def __init__(self, grid_conf, data_aug_conf, outC, num_y_steps, intrins,args):
         super(LiftSplatShoot, self).__init__()
         self.grid_conf = grid_conf
         self.data_aug_conf = data_aug_conf
@@ -355,6 +357,22 @@ class LiftSplatShoot(nn.Module):
         ################################
     
         self.intrins = nn.Parameter(torch.from_numpy(intrins), requires_grad=False)
+
+        effNetB0_dimList = [16, 24, 40, 112, 1280]
+        self.neck = nn.Sequential(*make_one_layer(effNetB0_dimList[0], args.feature_channels, batch_norm=True),
+                                  *make_one_layer(args.feature_channels, args.feature_channels, batch_norm=True))
+        # 2d lane detector
+        self.shared_encoder = Lane2D.FrontViewPathway(args.feature_channels, args.num_proj)
+        stride = 2
+        self.laneatt_head = Lane2D.LaneATTHead(stride * pow(2, args.num_proj - 1),
+                                               args.feature_channels * pow(2, args.num_proj - 2), # no change in last proj
+                                               args.im_anchor_origins,
+                                               args.im_anchor_angles,
+                                               img_w=args.resize_w,
+                                               img_h=args.resize_h,
+                                               S=args.S,
+                                               anchor_feat_channels=args.anchor_feat_channels,
+                                               num_category=2)
     
     def create_frustum(self):
         # make grid in image plane
@@ -402,12 +420,12 @@ class LiftSplatShoot(nn.Module):
         B, N, C, imH, imW = x.shape
         # print("x before encode", x.shape)
         x = x.view(B*N, C, imH, imW)
-        x = self.camencode(x)
+        x, encoder_feat = self.camencode(x)
         # print("x after encode", x.shape)
         x = x.view(B, N, self.camC, self.D, imH//self.downsample, imW//self.downsample)
         x = x.permute(0, 1, 3, 4, 5, 2)
 
-        return x
+        return x, encoder_feat
 
     def voxel_pooling(self, geom_feats, x):
     
@@ -476,16 +494,33 @@ class LiftSplatShoot(nn.Module):
     def get_voxels(self, x, rots, trans, intrins, post_rots, post_trans):
         #I believe that geom is a frustum describing each pixel in the input images in the 3d world!
         geom = self.get_geometry(rots, trans, intrins, post_rots, post_trans)
-        x = self.get_cam_feats(x)
+        x, encoder_feat = self.get_cam_feats(x)
 
         x = self.voxel_pooling(geom, x)
 
-        return x
+        return x, encoder_feat
 
     def forward(self, x, rot_cam2ego, trans_cam2ego, post_rots, post_trans):
     
         # print("self.nx_->forward", self.nx_)
-        x = self.get_voxels(x, rot_cam2ego, trans_cam2ego, self.intrins, post_rots, post_trans)
+        x, encoder_feat = self.get_voxels(x, rot_cam2ego, trans_cam2ego, self.intrins, post_rots, post_trans)
+
+##############################
+        
+        out_featList = encoder_feat#self.encoder(input)
+        neck_out = self.neck(out_featList[0])
+        frontview_features = self.shared_encoder(neck_out)
+        '''
+            frontview_features_0 size: torch.Size([4, 128, 180, 240])
+            frontview_features_1 size: torch.Size([4, 256, 90, 120])
+            frontview_features_2 size: torch.Size([4, 512, 45, 60])
+            frontview_features_3 size: torch.Size([4, 512, 22, 30])
+        '''
+        frontview_final_feat = frontview_features[-1]
+
+        laneatt_proposals_list = self.laneatt_head(frontview_final_feat)
+##############################
+
         # print('********************* x size before lane pridection')
         # print(x.shape)
         # x = self.bevencode(x)
@@ -495,8 +530,8 @@ class LiftSplatShoot(nn.Module):
         x = self.lane_out(x)
         # print('final out shape')
         # print(out.shape)
-        return x, self.w_l1, self.w_ce
+        return laneatt_proposals_list, x, self.w_l1, self.w_ce
 
 
-def compile_model(grid_conf, data_aug_conf, outC, num_y_steps, intrins):
-    return LiftSplatShoot(grid_conf, data_aug_conf, outC, num_y_steps, intrins)
+def compile_model(grid_conf, data_aug_conf, outC, num_y_steps, intrins,args):
+    return LiftSplatShoot(grid_conf, data_aug_conf, outC, num_y_steps, intrins, args)

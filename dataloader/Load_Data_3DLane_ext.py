@@ -131,7 +131,11 @@ class LaneDataset(Dataset):
                 self._y_off_std, \
                 self._z_std, \
                 self._gt_laneline_visibility_all, \
-                self._gt_centerline_visibility_all = self.init_dataset_3D(dataset_base_dir, json_file_path)
+                self._gt_centerline_visibility_all, \
+                self._gt_laneline_im_all, \
+                self._gt_centerline_im_all, \
+                self._im_anchor_origins, \
+                self._im_anchor_angles = self.init_dataset_3D(dataset_base_dir, json_file_path)
         self.n_samples = self._label_image_path.shape[0]
         # print('self.n_samples',self.n_samples)
 
@@ -368,6 +372,43 @@ class LaneDataset(Dataset):
         gt_cam_pitch_all = np.array(gt_cam_pitch_all)
         gt_laneline_pts_all_org = copy.deepcopy(gt_laneline_pts_all) # list where each element in the list carries a dict for each image, and each element in the dict carries an np array for the lane
 
+
+        anchor_origins = None
+        anchor_angles = None
+        if not self.use_default_anchor:
+            # calculate 2D anchor location by projecting 3D anchor
+            # Non-perfect method: use fixed camera parameter to ensure fixed anchor on both 2D and 3D
+            mean_cam_height = np.mean(gt_cam_height_all)
+            mean_cam_pitch = np.mean(gt_cam_pitch_all)
+            print("mean_cam_height {}, mean_cam_pitch {}".format(mean_cam_height, mean_cam_pitch))
+            mean_H_g2im = homograpthy_g2im(mean_cam_pitch, mean_cam_height, self.K)
+            left_orig, right_orig, bottom_orig = [], [], []
+            left_angles, right_angles, bottom_angles = [], [], []
+            for aid, anchor_line in enumerate(self.anchor_grid_x):
+                end_points_x = np.array([anchor_line[0], anchor_line[-1]])
+                end_points_y = np.array([self.anchor_y_steps[0], self.anchor_y_steps[-1]])
+                end_points_u, end_points_v = homographic_transformation(mean_H_g2im, end_points_x, end_points_y)
+                u1, v1, u2, v2 = end_points_u[0], end_points_v[0], end_points_u[1], end_points_v[1]
+                angle_rad = np.arctan(((v1 - v2) * self.v_ratio) / ((u1 - u2) * self.u_ratio))
+                angle_rad = -angle_rad if angle_rad < 0 else np.pi - angle_rad
+                angle_deg = angle_rad * 180 / np.pi
+                u_bot = (u1 - u2) / (v1 - v2) * (self.h_org - v1) + u1
+                if u_bot < 0:  # intersect on left edge
+                    v_orig = (v1 - v2) / (u1 - u2) * (-u1) + v1
+                    left_orig.append(v_orig / self.h_org)
+                    left_angles.append(angle_deg)
+                elif u_bot > self.w_org:  # intersect on right edge
+                    v_orig = (v1 - v2) / (u1 - u2) * (self.w_org - u1) + v1
+                    right_orig.append(v_orig / self.h_org)
+                    right_angles.append(angle_deg)
+                else:  # intersect on bottom edge
+                    bottom_orig.append(u_bot / self.w_org)
+                    bottom_angles.append(angle_deg)
+            anchor_origins = [np.array(left_orig), np.array(right_orig), np.array(bottom_orig)]
+            anchor_angles = [np.array(left_angles), np.array(right_angles), np.array(bottom_angles)]
+
+
+
         # convert labeled laneline to anchor format
         gt_laneline_ass_ids = []
         gt_centerline_ass_ids = []
@@ -375,6 +416,8 @@ class LaneDataset(Dataset):
         lane_z_all = []
         lane_y_off_all = []  # this is the offset of y when transformed back 3 3D
         visibility_all_flat = []
+        gt_laneline_im_all = []
+        gt_centerline_im_all = []
         for idx in range(len(gt_laneline_pts_all)):
             # if idx == 936:
             #     print(label_image_path[idx])
@@ -399,6 +442,14 @@ class LaneDataset(Dataset):
             # prune out-of-range points are necessary before transformation
             gt_lanes = [prune_3d_lane_by_range(gt_lane, 3*self.x_min, 3*self.x_max) for gt_lane in gt_lanes]
             gt_lanes = [lane for lane in gt_lanes if lane.shape[0] > 1]
+            
+            # project gt laneline to image plane
+            gt_laneline_im = []
+            for gt_lane in gt_lanes:
+                x_vals, y_vals = projective_transformation(P_g2im, gt_lane[:,0], gt_lane[:,1], gt_lane[:,2])
+                gt_laneline_im_oneline = np.array([x_vals, y_vals]).T.tolist()
+                gt_laneline_im.append(gt_laneline_im_oneline)
+            gt_laneline_im_all.append(gt_laneline_im)
 
             # convert 3d lanes to flat ground space
             self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
@@ -437,6 +488,13 @@ class LaneDataset(Dataset):
                 gt_lanes = [prune_3d_lane_by_range(gt_lane, 3 * self.x_min, 3 * self.x_max) for gt_lane in gt_lanes]
                 gt_lanes = [lane for lane in gt_lanes if lane.shape[0] > 1]
 
+                # project gt centerline to image plane
+                gt_centerline_im = []
+                for gt_lane in gt_lanes:
+                    x_vals, y_vals = projective_transformation(P_g2im, gt_lane[:,0], gt_lane[:,1], gt_lane[:,2])
+                    gt_centerline_im.append(np.array([x_vals, y_vals]).T.tolist())
+                gt_centerline_im_all.append(gt_laneline_im)
+
                 # convert 3d lanes to flat ground space
                 self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
 
@@ -474,7 +532,9 @@ class LaneDataset(Dataset):
         return label_image_path, gt_laneline_pts_all_org,\
                gt_laneline_pts_all, gt_centerline_pts_all, gt_cam_height_all, gt_cam_pitch_all,\
                gt_laneline_ass_ids, gt_centerline_ass_ids, lane_x_off_std, lane_y_off_std, lane_z_std,\
-               gt_laneline_visibility_all, gt_centerline_visibility_all
+               gt_laneline_visibility_all, gt_centerline_visibility_all,
+               gt_laneline_im_all, gt_centerline_im_all,\
+               anchor_origins, anchor_angles
 
     def init_dataset_tusimple(self, dataset_base_dir, json_file_path):
         """
@@ -684,10 +744,26 @@ class LaneDataset(Dataset):
         if np.sum(visibility_vec) < 2:
             return -1, np.array([]), np.array([]), np.array([])
 
-        # decide association at r_ref
-        ass_id = np.argmin((self.anchor_x_steps - x_values[self.ref_id]) ** 2)
-        # compute offset values
-        x_off_values = x_values - self.anchor_x_steps[ass_id]
+        # # decide association at r_ref
+        # ass_id = np.argmin((self.anchor_x_steps - x_values[self.ref_id]) ** 2)
+        # # compute offset values
+        # x_off_values = x_values - self.anchor_x_steps[ass_id]
+
+        if self.use_default_anchor:
+            # decide association at r_ref
+            ass_id = np.argmin((self.anchor_x_steps - x_values[self.ref_id]) ** 2)
+            # compute offset values
+            x_off_values = x_values - self.anchor_x_steps[ass_id]
+        else:
+            if not self.new_match:
+                # decide association at visible offset locations
+                ass_id = np.argmin(np.linalg.norm(np.multiply(self.anchor_grid_x - x_values, visibility_vec), axis=1))
+                # compute offset values
+                x_off_values = x_values - self.anchor_grid_x[ass_id]
+            else:
+                ass_id = -1  # Shouldn't use
+                x_off_values = x_values - self.anchor_grid_x  # offset compared with all anchors instead of closest one
+
 
         return ass_id, x_off_values, z_values, visibility_vec
 

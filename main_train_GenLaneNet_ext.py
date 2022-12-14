@@ -174,7 +174,7 @@ def train_net():
     # outC needed for the bevEncode-> bevEncode removed
     # the grid conf is kind of important
     # num_y_steps defines the size of the the output
-    model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K)
+    model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K, args)
     # define_init_weights(model, args.weight_init)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     #calculate the number of parameters
