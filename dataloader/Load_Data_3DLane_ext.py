@@ -532,7 +532,7 @@ class LaneDataset(Dataset):
         return label_image_path, gt_laneline_pts_all_org,\
                gt_laneline_pts_all, gt_centerline_pts_all, gt_cam_height_all, gt_cam_pitch_all,\
                gt_laneline_ass_ids, gt_centerline_ass_ids, lane_x_off_std, lane_y_off_std, lane_z_std,\
-               gt_laneline_visibility_all, gt_centerline_visibility_all,
+               gt_laneline_visibility_all, gt_centerline_visibility_all, \
                gt_laneline_im_all, gt_centerline_im_all,\
                anchor_origins, anchor_angles
 
