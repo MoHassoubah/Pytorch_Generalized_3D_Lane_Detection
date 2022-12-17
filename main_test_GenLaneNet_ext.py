@@ -152,7 +152,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # manual settings
-    args.dataset_dir = './media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
+    args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
     args.dataset_name = 'illus_chg'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
     args.mod = 'Gen_LaneNet_ext'  # model name
     test_name = 'test'  # test set name
@@ -223,7 +223,7 @@ if __name__ == '__main__':
     ##############
     
     
-    resolution_ratio = [0.3,0.25,0.22,0.15,0.1]
+    resolution_ratio = [0.25]#[0.3,0.25,0.22,0.15,0.1]
     H=1080
     W=1920
     
