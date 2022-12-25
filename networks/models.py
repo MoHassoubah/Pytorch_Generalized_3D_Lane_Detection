@@ -10,7 +10,8 @@ from efficientnet_pytorch import EfficientNet
 from torchvision.models.resnet import resnet18
 
 from tools.utils import gen_dx_bx, cumsum_trick, QuickCumsum
-import Lane2D
+from networks.Lane2D import FrontViewPathway,LaneATTHead
+from networks.SegHead import SegmentHead
 
 
 def make_layers(cfg, in_channels=3, batch_norm=False):
@@ -96,7 +97,7 @@ class CamEncode(nn.Module):
         # Stem
         x = self.trunk._swish(self.trunk._bn0(self.trunk._conv_stem(x)))
         prev_x = x
-        encoder_feat = x
+        # print('x start=',x.shape)
 
         # Blocks
         for idx, block in enumerate(self.trunk._blocks):
@@ -104,6 +105,9 @@ class CamEncode(nn.Module):
             if drop_connect_rate:
                 drop_connect_rate *= float(idx) / len(self.trunk._blocks) # scale drop connect_rate
             x = block(x, drop_connect_rate=drop_connect_rate)
+            if idx==0:
+                encoder_feat = x.clone()
+            # print('x=',x.shape)
             if prev_x.size(2) > x.size(2):
                 endpoints['reduction_{}'.format(len(endpoints)+1)] = prev_x
             prev_x = x
@@ -254,7 +258,8 @@ class LanePredictionHead(nn.Module):
 
 
 class Lane3DPredictionHead(nn.Module):
-    def __init__(self, num_lane_type, num_y_steps, batch_norm=False):
+    def __init__(self, num_lane_type, num_y_steps,fmap_mapping_interp_index,
+                                                  fmap_mapping_interp_weight, batch_norm=False):
         super(Lane3DPredictionHead, self).__init__()
         self.num_lane_type = num_lane_type
         self.num_y_steps = num_y_steps
@@ -285,17 +290,56 @@ class Lane3DPredictionHead(nn.Module):
         # Output after the layer [8, 93, 16, 1], each anchor line has 3 types, each anchor line has 31 (x,z,vis + 1 ex_pro)values
         self.dim_rt = nn.Sequential(*dim_rt_layers)
 
+        self.use_default_anchor = True
+        if fmap_mapping_interp_index is not None and fmap_mapping_interp_weight is not None:
+            self.use_default_anchor = False
+            self.fmap_mapping_interp_index = torch.tensor(fmap_mapping_interp_index)
+            self.fmap_mapping_interp_weight = torch.tensor(fmap_mapping_interp_weight)
+            # if not no_cuda:
+            #     self.fmap_mapping_interp_index = self.fmap_mapping_interp_index.cuda()
+            #     self.fmap_mapping_interp_weight = self.fmap_mapping_interp_weight.cuda()
+
+
     def forward(self, x):
-        # print('x before features', x.shape)
+
+        # print('x before features3d', x.shape)
         x = self.features_3d(x)
         sizes = x.shape
         x = x.reshape(sizes[0], sizes[1]*sizes[2], sizes[3], sizes[4])
+        # print('x after features3d', x.shape)
+
+        if not self.use_default_anchor:
+            # multi-gpu setting
+            batch_size, channel, fmap_h, fmap_w = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
+            sheared_feature_map = torch.zeros((batch_size, channel, fmap_h, fmap_w*6)).to(x.device)
+            v_arange = torch.arange(fmap_h).unsqueeze(dim=1).repeat(1,fmap_w*6).type(torch.int64).to(x.device)
+            self.fmap_mapping_interp_index = self.fmap_mapping_interp_index.type(torch.int64).to(x.device)
+            self.fmap_mapping_interp_weight = self.fmap_mapping_interp_weight.type(torch.int64).to(x.device)
+            # print('v_arange',v_arange.shape)
+            # print('self.fmap_mapping_interp_index',self.fmap_mapping_interp_index.shape)
+            # print('self.fmap_mapping_interp_weight',self.fmap_mapping_interp_weight.shape)
+            # print('x',x.shape)
+            for batch_idx, x_feature_map in enumerate(x):
+                # if True:
+                # print("v_arange device: " + str(v_arange.device))
+                # print("self.fmap_mapping_interp_index device: " + str(self.fmap_mapping_interp_index.device))
+                # print("self.fmap_mapping_interp_weight device: " + str(self.fmap_mapping_interp_weight.device))
+                # print("sheared_feature_map device: " + str(sheared_feature_map.device))
+                # print("batch_idx device: " + str(v_arange.device))
+                # print("x_feature_map device: " + str(x_feature_map.device))
+
+                sheared_feature_map[batch_idx] = \
+                    x_feature_map[:, v_arange, self.fmap_mapping_interp_index[:,:,0]] * self.fmap_mapping_interp_weight[:,:,0] + \
+                    x_feature_map[:, v_arange, self.fmap_mapping_interp_index[:,:,1]] * self.fmap_mapping_interp_weight[:,:,1]
+            x = torch.cat((x, sheared_feature_map), dim=3)
         
+        # print('x before features', x.shape)
         x = self.features(x)
         # print('x after features', x.shape)
         # x suppose to be N X 64 X 4 X ipm_w/8, reshape to N X 256 X ipm_w/8 X 1
         sizes = x.shape
         x = x.reshape(sizes[0], sizes[1]*sizes[2], sizes[3], 1)
+        # print('x after features reshape', x.shape)
         x = self.dim_rt(x)
         # print('x after dim_rt', x.shape)
         x = x.squeeze(-1).transpose(1, 2)
@@ -345,8 +389,10 @@ class LiftSplatShoot(nn.Module):
         
         # self.lane_out = LanePredictionHead(32, self.num_lane_type, self.num_y_steps, batch_norm=True)
         # self.lane_out = LanePredictionHead(self.num_lane_type, self.num_y_steps, True)
-        self.lane_out = Lane3DPredictionHead(self.num_lane_type, self.num_y_steps, True)
-
+        self.lane_out = Lane3DPredictionHead(self.num_lane_type, self.num_y_steps,
+                                                  args.fmap_mapping_interp_index,
+                                                  args.fmap_mapping_interp_weight,True)
+        
         # toggle using QuickCumsum vs. autograd
         self.use_quickcumsum = True
         
@@ -357,14 +403,15 @@ class LiftSplatShoot(nn.Module):
         ################################
     
         self.intrins = nn.Parameter(torch.from_numpy(intrins), requires_grad=False)
-
+        
+        ################################
         effNetB0_dimList = [16, 24, 40, 112, 1280]
         self.neck = nn.Sequential(*make_one_layer(effNetB0_dimList[0], args.feature_channels, batch_norm=True),
                                   *make_one_layer(args.feature_channels, args.feature_channels, batch_norm=True))
         # 2d lane detector
-        self.shared_encoder = Lane2D.FrontViewPathway(args.feature_channels, args.num_proj)
+        self.shared_encoder = FrontViewPathway(args.feature_channels, args.num_proj)
         stride = 2
-        self.laneatt_head = Lane2D.LaneATTHead(stride * pow(2, args.num_proj - 1),
+        self.laneatt_head = LaneATTHead(stride * pow(2, args.num_proj - 1),
                                                args.feature_channels * pow(2, args.num_proj - 2), # no change in last proj
                                                args.im_anchor_origins,
                                                args.im_anchor_angles,
@@ -372,7 +419,17 @@ class LiftSplatShoot(nn.Module):
                                                img_h=args.resize_h,
                                                S=args.S,
                                                anchor_feat_channels=args.anchor_feat_channels,
-                                               num_category=2)
+                                               num_category=1)
+        # segmentation head
+        self.segment_head = SegmentHead(channels=args.feature_channels)
+        # uncertainty loss weight
+        self.uncertainty_loss = nn.Parameter(torch.tensor([args._3d_vis_loss_weight,
+                                                            args._3d_prob_loss_weight,
+                                                            args._3d_reg_loss_weight,
+                                                            args._2d_vis_loss_weight,
+                                                            args._2d_prob_loss_weight,
+                                                            args._2d_reg_loss_weight,
+                                                            args._seg_loss_weight]), requires_grad=True)
     
     def create_frustum(self):
         # make grid in image plane
@@ -486,10 +543,10 @@ class LiftSplatShoot(nn.Module):
         # print("final dim before collapse", final.shape)
         
         # collapse Z
-        # final = torch.cat(final.unbind(dim=2), 1)# seems dim 1 is C*Z
+        # final2d = torch.cat(final.unbind(dim=2), 1)# seems dim 1 is C*Z
         # print("final dim after collapse", final.shape)
 
-        return final
+        return final#,final2d
 
     def get_voxels(self, x, rots, trans, intrins, post_rots, post_trans):
         #I believe that geom is a frustum describing each pixel in the input images in the 3d world!
@@ -508,7 +565,9 @@ class LiftSplatShoot(nn.Module):
 ##############################
         
         out_featList = encoder_feat#self.encoder(input)
-        neck_out = self.neck(out_featList[0])
+        # print('out_featList', out_featList.shape)
+        neck_out = self.neck(out_featList)
+        # print('neck_out', neck_out.shape)
         frontview_features = self.shared_encoder(neck_out)
         '''
             frontview_features_0 size: torch.Size([4, 128, 180, 240])
@@ -517,8 +576,20 @@ class LiftSplatShoot(nn.Module):
             frontview_features_3 size: torch.Size([4, 512, 22, 30])
         '''
         frontview_final_feat = frontview_features[-1]
+        # print('frontview_final_feat', frontview_final_feat.shape)
 
         laneatt_proposals_list = self.laneatt_head(frontview_final_feat)
+
+        # print('x before segmentation', x.shape)
+        # x2d = self.bevencode(x2d)
+        x2d = torch.sum(x,dim=2)
+        # print('x2d', x2d.shape)
+        pred_seg_bev_map = self.segment_head(x2d)
+        # print('pred_seg_bev_map', pred_seg_bev_map.shape)
+
+        # seperate loss weight
+        uncertainty_loss = torch.tensor(1.0).to(x.device) * self.uncertainty_loss.to(x.device)
+
 ##############################
 
         # print('********************* x size before lane pridection')
@@ -530,7 +601,7 @@ class LiftSplatShoot(nn.Module):
         x = self.lane_out(x)
         # print('final out shape')
         # print(out.shape)
-        return laneatt_proposals_list, x, self.w_l1, self.w_ce
+        return laneatt_proposals_list, pred_seg_bev_map, x, self.w_l1, self.w_ce,uncertainty_loss
 
 
 def compile_model(grid_conf, data_aug_conf, outC, num_y_steps, intrins,args):

@@ -22,7 +22,10 @@ from mpl_toolkits.mplot3d import Axes3D
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
+from scipy.special import softmax
+# import nms
 plt.rcParams['figure.figsize'] = (35, 30)
+
 
 ###########################
 
@@ -124,6 +127,15 @@ def define_args():
     parser.add_argument('--num_proj', type=int, default=4, help='number of projection layers')
     parser.add_argument('--S', type=int, default=72, help='max sample number in img height')
     parser.add_argument('--anchor_feat_channels', type=int, default=64, help='number of anchor feature channels')
+    parser.add_argument('--max_lanes', type=int, default=6, help='max lane number detection in LaneATT')
+    parser.add_argument('--new_match', type=str2bool, nargs='?', const=True, default=False, help='Allow multiple anchors to match the same GT during 3D data loading')
+    parser.add_argument('--match_dist_thre_3d', type=float, default=2.0, help='Threshold to match an anchor to GT when using new_match, unit: meter')
+    parser.add_argument('--use_default_anchor', type=str2bool, nargs='?', const=True, default=False, help='use default anchors in 2D and 3D')
+    parser.add_argument('--seg_start_epoch', type=int, default=1, help='Number of epochs to perform segmentation pretraining')
+    parser.add_argument('--loss_att_weight', type=float, default=100.0, help='2D lane losses weight w.r.t. 3D lane losses')
+    parser.add_argument('--cls_loss_weight', type=float, default=1.0, help='cls loss weight w.r.t. reg loss in 2D prediction')
+    parser.add_argument('--reg_vis_loss_weight', type=float, default=1.0, help='reg vis loss weight w.r.t. reg loss in 2D prediction')
+    parser.add_argument('--nms_thres_3d', type=float, default=1.0, help='nms threshold to filter detections in BEV, unit: meter')
     # Optimizer settings
     parser.add_argument('--optimizer', type=str, default='adam', help='adam or sgd')
     parser.add_argument('--weight_init', type=str, default='xavier', help='normal, xavier, kaiming, orhtogonal weights initialisation')
@@ -215,6 +227,18 @@ def sim3d_config(args):
     args.pretrained = False
     # apply batch norm in network
     args.batch_norm = True
+    args.feature_channels = 64
+    args.seg_bev = True
+    args.max_lanes = 6
+    args.learnable_weight_on = False#True
+    args._3d_vis_loss_weight = 0.0 # -2.3026
+    args._3d_prob_loss_weight = 0.0 # -1.3863
+    args._3d_reg_loss_weight = 0.0
+    args._2d_vis_loss_weight = 0.0 # -4.6052
+    args._2d_prob_loss_weight = 0.0 # -4.6052
+    args._2d_reg_loss_weight = 0.0 # -4.6052
+    args._seg_loss_weight = 0.0 # -2.3026
+    args.num_category = 1
 
 
 class Visualizer:
@@ -227,6 +251,7 @@ class Visualizer:
         self.vgg_std = args.vgg_std
         self.ipm_w = args.ipm_w
         self.ipm_h = args.ipm_h
+        self.use_default_anchor = args.use_default_anchor
         self.num_y_steps = args.num_y_steps
 
         if args.no_3d:
@@ -239,7 +264,10 @@ class Visualizer:
 
         x_min = args.top_view_region[0, 0]
         x_max = args.top_view_region[1, 0]
-        self.anchor_x_steps = np.linspace(x_min, x_max, np.int(args.ipm_w / 8), endpoint=True)
+        if self.use_default_anchor:
+            self.anchor_x_steps = np.linspace(x_min, x_max, np.int(args.ipm_w / 8), endpoint=True)
+        else:
+            self.anchor_x_steps = args.anchor_grid_x
         self.anchor_y_steps = args.anchor_y_steps
 
         # transformation from ipm to ground region
@@ -722,12 +750,14 @@ class Visualizer:
 
             # apply nms to avoid output directly neighbored lanes
             # consider w/o centerline cases
-            if self.no_centerline:
-                pred_anchors[:, -1] = nms_1d(pred_anchors[:, -1])
-            else:
-                pred_anchors[:, self.anchor_dim - 1] = nms_1d(pred_anchors[:, self.anchor_dim - 1])
-                pred_anchors[:, 2 * self.anchor_dim - 1] = nms_1d(pred_anchors[:, 2 * self.anchor_dim - 1])
-                pred_anchors[:, 3 * self.anchor_dim - 1] = nms_1d(pred_anchors[:, 3 * self.anchor_dim - 1])
+            
+            if self.use_default_anchor:
+                if self.no_centerline:
+                    pred_anchors[:, -1] = nms_1d(pred_anchors[:, -1])
+                else:
+                    pred_anchors[:, self.anchor_dim - 1] = nms_1d(pred_anchors[:, self.anchor_dim - 1])
+                    pred_anchors[:, 2 * self.anchor_dim - 1] = nms_1d(pred_anchors[:, 2 * self.anchor_dim - 1])
+                    pred_anchors[:, 3 * self.anchor_dim - 1] = nms_1d(pred_anchors[:, 3 * self.anchor_dim - 1])
 
             H_g2im, P_g2im, H_crop, H_im2ipm = dataset.transform_mats(idx[i])
             P_gt = np.matmul(H_crop, H_g2im)
@@ -1070,6 +1100,68 @@ def nms_1d(v):
         elif i is not len-1 and v[i+1] > v[i]:
             v_out[i] = 0.
     return v_out
+
+# def nms_bev(batch_output_net, args):
+#     """apply nms to filter predictions of same GT from different anchors"""
+#     # if not args.no_centerline:
+#     #     raise NotImplementedError
+#     if args.no_3d:
+#         anchor_dim = args.num_y_steps + args.num_category
+#     else:
+#         anchor_dim = 3*args.num_y_steps + args.num_category
+#     anchor_x_steps = args.anchor_grid_x \
+#         if not args.use_default_anchor \
+#         else np.linspace(args.top_view_region[0, 0], args.top_view_region[1, 0], np.int(args.ipm_w/8))
+
+#     batch_output_net = batch_output_net.reshape(batch_output_net.shape[0], anchor_x_steps.shape[0],3, anchor_dim)
+    
+#     for n_typ in range(3):
+#         # print("cate before softmax: ", batch_output_net[:, :, anchor_dim-args.num_category:].shape)
+#         # print(batch_output_net[0, :16, :])
+#         batch_output_net[:, :,n_typ, anchor_dim-args.num_category:] = \
+#             softmax(batch_output_net[:, :,n_typ, anchor_dim-args.num_category:], axis=2)
+#         # print("cate after softmax: ", batch_output_net[:, :, anchor_dim-args.num_category:].shape)
+#         # print(batch_output_net[0, :16, :])
+#         for i, output_net in enumerate(batch_output_net[:,:,n_typ,:]):
+#             # pack prediction data to nms library format
+#             scores = torch.zeros(len(output_net)).cuda()
+#             output_net_nms = torch.zeros(len(output_net), 2 + 3 + args.S).cuda()
+#             pre_nms_valid_anchor_id = []
+#             valid_count = 0
+#             for j, output_anchor in enumerate(output_net):
+#                 # print("max cate id: ", np.argmax(output_anchor[anchor_dim-args.num_category:]))
+#                 visible_yid = np.where(output_anchor[2*args.num_y_steps: 3*args.num_y_steps] > args.prob_th)[0]
+#                 # print("vis points: ", len(visible_yid))
+#                 if np.argmax(output_anchor[anchor_dim-args.num_category:]) == \
+#                     anchor_dim-args.num_category or len(visible_yid) < 2:
+#                     # print("skip")
+#                     continue
+#                 pre_nms_valid_anchor_id.append(j)
+                
+#                 scores[valid_count] = output_anchor[-1].item()
+#                 yid_start = visible_yid[0]
+#                 # approximation here, since there can be invisible points in between
+#                 yid_num = visible_yid[-1] - visible_yid[0] + 1
+#                 output_net_nms[valid_count, 2] = (yid_start / (args.S-1)).item()
+#                 output_net_nms[valid_count, 4] = yid_num.item()
+#                 output_net_nms[valid_count, 5 : 5+args.num_y_steps] = \
+#                     torch.from_numpy(output_anchor[:args.num_y_steps] + anchor_x_steps[j])
+                
+#                 valid_count = valid_count + 1
+#             scores = scores[:valid_count]
+#             output_net_nms = output_net_nms[:valid_count]
+#             # print("scores: ", scores)
+#             # print(output_net_nms[:, :16])
+#             keep, num_to_keep, _ = nms(output_net_nms, scores, overlap=args.nms_thres_3d, top_k=args.max_lanes)
+#             # print("keep before reduction: ", keep)
+#             keep = keep[:num_to_keep].tolist()
+#             # print("keep after reduction: ", keep)
+#             for jj, anchor_id in enumerate(pre_nms_valid_anchor_id):
+#                 if jj not in keep:
+#                     # update category as invalid, so that it can be filted in compute_3d_lanes()
+#                     batch_output_net[i][anchor_id][n_typ][anchor_dim-args.num_category] = 0.0
+
+#     return batch_output_net
 
 
 def first_run(save_path):

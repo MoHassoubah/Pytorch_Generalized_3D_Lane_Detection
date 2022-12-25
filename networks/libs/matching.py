@@ -62,7 +62,7 @@ def match_proposals_with_targets(model, proposals, targets, t_pos=25., t_neg=30.
     x_s, y_s = torch.nonzero(target_vis == 1, as_tuple=True)
     new_last_vis_idx = np.zeros(last_vis_idx.shape, dtype=np.int)
     new_last_vis_idx[x_s.cpu().numpy()] = y_s.cpu().numpy().astype(np.int)
-    ends = torch.from_numpy(new_last_vis_idx).to(targets.device)
+    ends = torch.from_numpy(new_last_vis_idx).to(targets.device).long()
     # print("Fast: ", new_last_vis_idx)
     
     lengths = ends - starts + 1

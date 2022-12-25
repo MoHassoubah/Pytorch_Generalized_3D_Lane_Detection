@@ -127,7 +127,7 @@ class FrontViewPathwayFixChannel(nn.Module):
 
 class LaneATTHead(nn.Module):
     def __init__(self, stride, input_channels, im_anchor_origins, im_anchor_angles,
-                 img_w=640, img_h=360, S=72, anchor_feat_channels=64, num_category=2):
+                 img_w=640, img_h=360, S=72, anchor_feat_channels=64, num_category=1):
         super(LaneATTHead, self).__init__()
 
         self.stride = stride
@@ -153,6 +153,7 @@ class LaneATTHead(nn.Module):
             self.left_angles = im_anchor_angles[0]
             self.right_angles = im_anchor_angles[1]
             self.bottom_angles = im_anchor_angles[2]
+            # print('**********no use def anchor')
             # Generate anchors
             self.anchors, self.anchors_cut = self.generate_anchors_new()
         else:
@@ -184,7 +185,7 @@ class LaneATTHead(nn.Module):
 
         # Join proposals from all images into a single proposals features batch
         batch_anchor_features = batch_anchor_features.view(-1, self.anchor_feat_channels * self.fmap_h)
-
+        # print('batch_anchor_features',batch_anchor_features.shape)
         # Move relevant tensors to device
         self.anchors = self.anchors.to(device=batch_features.device)
 

@@ -43,6 +43,40 @@ def load_my_state_dict(model, state_dict):  # custom function to load model when
     print('#reused param: {}'.format(cnt))
     return model
 
+def compute_loss(args, epoch, loss_3d, loss_att, loss_seg, loss_3d_dict, loss_att_dict, uncertainty_loss):
+    if args.learnable_weight_on:
+        loss = 0
+        _3d_vis_loss_factor = 1 / torch.exp(uncertainty_loss[0])
+        loss += _3d_vis_loss_factor * loss_3d_dict['vis_loss']
+        _3d_prob_loss_factor = 1 / torch.exp(uncertainty_loss[1])
+        loss += _3d_prob_loss_factor * loss_3d_dict['prob_loss']
+        _3d_reg_loss_factor = 1 / torch.exp(uncertainty_loss[2])
+        loss += _3d_reg_loss_factor * loss_3d_dict['reg_loss']
+
+        open_2d = 1.0
+        _2d_vis_loss_factor = 1 / torch.exp(uncertainty_loss[3])
+        loss += open_2d * _2d_vis_loss_factor * loss_att_dict['vis_loss']
+        _2d_prob_loss_factor = 1 / torch.exp(uncertainty_loss[4])
+        loss += open_2d * _2d_prob_loss_factor * loss_att_dict['cls_loss']
+        _2d_reg_loss_factor = 1 / torch.exp(uncertainty_loss[5])
+        loss += open_2d * _2d_reg_loss_factor * loss_att_dict['reg_loss']
+
+        loss += uncertainty_loss[0:6].sum() * 0.5
+        if epoch > args.seg_start_epoch:
+            _seg_loss_factor = 1 / torch.exp(uncertainty_loss[6])
+            loss += _seg_loss_factor * loss_seg
+            loss += uncertainty_loss[6].sum() * 0.5
+        else:
+            loss += 0.0 * loss_seg
+            loss += uncertainty_loss[6].sum() * 0.0
+    else:
+        # epoch depended loss
+        if epoch > args.seg_start_epoch:
+            loss = loss_3d + args.loss_att_weight * loss_att + args.loss_seg_weight * loss_seg + 0.0 * uncertainty_loss[0:6].sum()
+        else:
+            loss = loss_3d + args.loss_att_weight * loss_att + 0.0 * loss_seg + 0.0 * uncertainty_loss[0:6].sum()
+    return loss
+
 
 def train_net():
 
@@ -83,7 +117,7 @@ def train_net():
     valid_dataset.normalize_lane_label()
     args.batch_size = 8
     valid_loader = get_loader(valid_dataset, args)
-    args.batch_size = 6
+    args.batch_size = 5
 
     # extract valid set labels for evaluation later
     global valid_set_labels
@@ -174,7 +208,7 @@ def train_net():
     # outC needed for the bevEncode-> bevEncode removed
     # the grid conf is kind of important
     # num_y_steps defines the size of the the output
-    model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K, args)
+    model = compile_model(grid_conf, data_aug_conf, outC=1, num_y_steps=args.num_y_steps, intrins=args.K, args=args)
     # define_init_weights(model, args.weight_init)
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     #calculate the number of parameters
@@ -222,13 +256,13 @@ def train_net():
     
     # Define loss criteria
     if crit_string == 'loss_gflat_3D':
-        criterion = Loss_crit.Laneline_loss_gflat_3D(args.batch_size, train_dataset.num_types,
-                                                     train_dataset.anchor_x_steps, train_dataset.anchor_y_steps,
+        criterion = Loss_crit.Laneline_loss_gflat_3D(args.batch_size,train_dataset.anchor_num, train_dataset.num_types,
+                                                     train_dataset.anchor_grid_x, train_dataset.anchor_y_steps,
                                                      train_dataset._x_off_std, train_dataset._y_off_std,
                                                      train_dataset._z_std, args.pred_cam, args.no_cuda)
         
-        criterion_val = Loss_crit.Laneline_loss_gflat_3D(8, train_dataset.num_types,
-                                                     train_dataset.anchor_x_steps, train_dataset.anchor_y_steps,
+        criterion_val = Loss_crit.Laneline_loss_gflat_3D(8,train_dataset.anchor_num, train_dataset.num_types,
+                                                     train_dataset.anchor_grid_x, train_dataset.anchor_y_steps,
                                                      train_dataset._x_off_std, train_dataset._y_off_std,
                                                      train_dataset._z_std, args.pred_cam, args.no_cuda)
     else:
@@ -238,7 +272,9 @@ def train_net():
         criterion = criterion.cuda(0)
         
         criterion_val = criterion_val.cuda(0)
-        
+
+    
+    bceloss = nn.BCEWithLogitsLoss()    
 
     # Logging setup
     best_epoch = 0
@@ -316,7 +352,10 @@ def train_net():
         # Define container objects to keep track of multiple losses/metrics
         batch_time = AverageMeter()
         data_time = AverageMeter()
-        losses = AverageMeter()
+        lossestot = AverageMeter()
+        losses3d = AverageMeter()
+        losses2d = AverageMeter()
+        lossesseg = AverageMeter()
 
         # Specify operation modules
         # model2.train()
@@ -326,7 +365,7 @@ def train_net():
         end = time.time()
 
         # Start training loop
-        for i, (input, seg_maps, gt, idx, gt_hcam, gt_pitch, aug_mat,rots, trans, post_rot, post_tran) in tqdm(enumerate(train_loader)):
+        for i, (input, seg_maps, gt,gt_laneline_img, idx, gt_hcam, gt_pitch, aug_mat,rots, trans, post_rot, post_tran,seg_bev_map) in tqdm(enumerate(train_loader)):
 
             # Time dataloader
             data_time.update(time.time() - end)
@@ -341,6 +380,8 @@ def train_net():
                 trans = trans.cuda(0)
                 post_rot = post_rot.cuda(0)
                 post_tran = post_tran.cuda(0)
+                gt_laneline_img = gt_laneline_img.cuda(0)
+                seg_bev_map = seg_bev_map.cuda(0)
             input = input.contiguous().float()
 
             # if not args.fix_cam and not args.pred_cam:
@@ -367,7 +408,8 @@ def train_net():
                 
             pred_pitch = gt_pitch
             pred_hcam = gt_hcam
-            output_net, w_l1, w_ce = model(input,
+            laneatt_proposals_list,pred_seg_bev_map, output_net, w_l1, w_ce, uncertainty_loss = \
+                model(input,
                 rots,
                 trans,
                 post_rot,
@@ -380,8 +422,23 @@ def train_net():
                 # continue
 
             # Compute losses on
-            loss = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
-            losses.update(loss.item(), input.size(0))
+            loss3d,loss_3d_dict = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
+
+            # Add laneatt loss
+            loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
+                                                                    cls_loss_weight=args.cls_loss_weight,
+                                                                    reg_vis_loss_weight=args.reg_vis_loss_weight)
+            # segmentation loss
+            loss_seg = bceloss(pred_seg_bev_map, seg_bev_map)
+            # overall loss
+            loss = compute_loss(args, epoch, 
+                                loss3d, loss_att, loss_seg, 
+                                loss_3d_dict, loss_att_dict, uncertainty_loss)
+
+            lossestot.update(loss.item(), input.size(0))
+            losses3d.update(loss3d.item(), input.size(0))
+            losses2d.update(loss_att.item(), input.size(0))
+            lossesseg.update(loss_seg.item(), input.size(0))
 
             # # Clip gradients (usefull for instabilities or mistakes in ground truth)
             # if args.clip_grad_norm != 0:
@@ -407,22 +464,27 @@ def train_net():
                 unormalize_lane_anchor(output_net[j], train_dataset)
                 unormalize_lane_anchor(gt[j], train_dataset)
 
+            
+            # Apply nms on network BEV output
+            # if not args.use_default_anchor:
+            #     output_net = nms_bev(output_net, args)
+
             # Print info
             if (i + 1) % args.print_freq == 0:
                 print('Epoch: [{0}][{1}/{2}]\t'
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:.8f} ({loss.avg:.8f})'.format(
                        epoch+1, i+1, len(train_loader), batch_time=batch_time,
-                       data_time=data_time, loss=losses))
+                       data_time=data_time, loss=lossestot))
 
             # Plot curves in two views
             if (i + 1) % args.save_freq == 0:
                 vs_saver.save_result_new(train_dataset, 'train', epoch, i, idx,
                                          input, gt, output_net, pred_pitch, pred_hcam, aug_mat)
 
-        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model, criterion_val, vs_saver, val_gt_file, epoch)
+        losses_valid, eval_stats = validate(valid_loader, valid_dataset, model,bceloss, criterion_val, vs_saver, val_gt_file, epoch)
 
-        print("===> Average {}-loss on training set is {:.8f}".format(crit_string, losses.avg))
+        print("===> Average {}-loss on training set is {:.8f}".format(crit_string, lossestot.avg))
         print("===> Average {}-loss on validation set is {:.8f}".format(crit_string, losses_valid))
         print("===> Evaluation laneline F-measure: {:3f}".format(eval_stats[0]))
         print("===> Evaluation laneline Recall: {:3f}".format(eval_stats[1]))
@@ -434,8 +496,14 @@ def train_net():
         print("===> Last best {}-loss was {:.8f} in epoch {}".format(crit_string, lowest_loss, best_epoch))
 
         if not args.no_tb:
-            writer.add_scalars('3D-Lane-Loss', {'Training': losses.avg}, epoch)
-            writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid}, epoch)
+            writer.add_scalars('TOT-Lane-Loss', {'Training': lossestot.avg}, epoch)
+            writer.add_scalars('3D-Lane-Loss', {'Training': losses3d.avg}, epoch)
+            writer.add_scalars('2D-Lane-Loss', {'Training': losses2d.avg}, epoch)
+            writer.add_scalars('SEG-Lane-Loss', {'Training': lossesseg.avg}, epoch)
+            writer.add_scalars('TOT-Lane-Loss', {'Validation': losses_valid['loss_tot']}, epoch)
+            writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid['loss_3d']}, epoch)
+            writer.add_scalars('2D-Lane-Loss', {'Validation': losses_valid['loss_2d']}, epoch)
+            writer.add_scalars('2D-Lane-Loss', {'Validation': losses_valid['loss_seg']}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
             writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
         total_score = eval_stats[0]#losses_valid #losses.avg
@@ -466,10 +534,13 @@ def train_net():
         writer.close()
 
 
-def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
+def validate(loader, dataset, model,bceloss, criterion, vs_saver, val_gt_file, epoch=0):
 
     # Define container to keep track of metric and loss
-    losses = AverageMeter()
+    lossestot = AverageMeter()
+    losses3d = AverageMeter()
+    losses2d = AverageMeter()
+    lossesseg = AverageMeter()
     lane_pred_file = ops.join(args.save_path, 'test_pred_file.json')
 
     # Evaluate model
@@ -479,7 +550,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
     with torch.no_grad():
         with open(lane_pred_file, 'w') as jsonFile:
             # Start validation loop
-            for i, (input, seg_maps, gt, idx, gt_hcam, gt_pitch,rots, trans, post_rot, post_tran) in tqdm(enumerate(loader)):
+            for i, (input, seg_maps, gt,gt_laneline_img, idx, gt_hcam, gt_pitch,rots, trans, post_rot, post_tran,seg_bev_map) in tqdm(enumerate(loader)):
                 if not args.no_cuda:
                     input, gt = input.cuda(non_blocking=True), gt.cuda(non_blocking=True)
                     seg_maps = seg_maps.cuda(non_blocking=True)
@@ -489,6 +560,8 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                     trans = trans.cuda(0)
                     post_rot = post_rot.cuda(0)
                     post_tran = post_tran.cuda(0)
+                    gt_laneline_img = gt_laneline_img.cuda(0)
+                    seg_bev_map = seg_bev_map.cuda(0)
                 input = input.contiguous().float()
 
                 # if not args.fix_cam and not args.pred_cam:
@@ -497,7 +570,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                                     
                 pred_pitch = gt_pitch
                 pred_hcam = gt_hcam
-                output_net, w_l1, w_ce = model(input,
+                laneatt_proposals_list,pred_seg_bev_map, output_net, w_l1, w_ce, uncertainty_loss= model(input,
                     rots,
                     trans,
                     post_rot,
@@ -505,9 +578,25 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                     )
 
                 input = input.squeeze(1)
-                # Compute losses on parameters or segmentation
-                loss = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
-                losses.update(loss.item(), input.size(0))
+                
+                # Compute losses on
+                loss3d,loss_3d_dict = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
+
+                # Add laneatt loss
+                loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
+                                                                        cls_loss_weight=args.cls_loss_weight,
+                                                                        reg_vis_loss_weight=args.reg_vis_loss_weight)
+                # segmentation loss
+                loss_seg = bceloss(pred_seg_bev_map, seg_bev_map)
+                # overall loss
+                loss = compute_loss(args, epoch, 
+                                    loss3d, loss_att, loss_seg, 
+                                    loss_3d_dict, loss_att_dict, uncertainty_loss)
+
+                lossestot.update(loss.item(), input.size(0))
+                losses3d.update(loss3d.item(), input.size(0))
+                losses2d.update(loss_att.item(), input.size(0))
+                lossesseg.update(loss_seg.item(), input.size(0))
 
                 pred_pitch = pred_pitch.data.cpu().numpy().flatten()
                 pred_hcam = pred_hcam.data.cpu().numpy().flatten()
@@ -524,7 +613,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                 if (i + 1) % args.print_freq == 0:
                         print('Test: [{0}/{1}]\t'
                               'Loss {loss.val:.8f} ({loss.avg:.8f})'.format(
-                               i+1, len(loader), loss=losses))
+                               i+1, len(loader), loss=lossestot))
 
                 # Plot curves in two views
                 if (i + 1) % args.save_freq == 0 or args.evaluate:
@@ -559,7 +648,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
         eval_stats = evaluator.bench_one_submit(lane_pred_file, val_gt_file)
 
         if args.evaluate:
-            print("===> Average {}-loss on validation set is {:.8}".format(crit_string, losses.avg))
+            print("===> Average {}-loss on validation set is {:.8}".format(crit_string, lossestot.avg))
             print("===> Evaluation on validation set: \n"
                   "laneline F-measure {:.8} \n"
                   "laneline Recall  {:.8} \n"
@@ -582,7 +671,7 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                                                                eval_stats[10], eval_stats[11],
                                                                eval_stats[12], eval_stats[13]))
 
-        return losses.avg, eval_stats
+        return {'loss_tot':lossestot.avg,'loss_3d':losses3d.avg, 'loss_2d':losses2d.avg, 'loss_seg':lossesseg.avg}, eval_stats
 
 
 def save_checkpoint(state, to_copy, epoch):
@@ -624,7 +713,7 @@ if __name__ == '__main__':
     args.prob_th = 0.5
     
     args.nepochs = 300
-    args.batch_size = 6
+    args.batch_size = 5
     
     # define the network model
     args.num_class = 2  # 1 background + n lane labels

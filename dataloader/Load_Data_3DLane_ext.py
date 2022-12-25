@@ -16,6 +16,7 @@ import random
 import warnings
 import torchvision.transforms.functional as F
 from tools.utils import *
+from scipy.interpolate import UnivariateSpline
 warnings.simplefilter('ignore', np.RankWarning)
 matplotlib.use('Agg')
 
@@ -46,6 +47,7 @@ class LaneDataset(Dataset):
         self.totensor = transforms.ToTensor()
         self.normalize = transforms.Normalize(args.vgg_mean, args.vgg_std)
         self.data_aug = data_aug
+        self.seg_bev = args.seg_bev
 
         # dataset parameters
         self.dataset_name = args.dataset_name
@@ -61,9 +63,21 @@ class LaneDataset(Dataset):
         self.w_net = args.resize_w
         self.ipm_h = args.ipm_h
         self.ipm_w = args.ipm_w
+        self.u_ratio = float(self.w_net) / float(self.w_org)
+        self.v_ratio = float(self.h_net) / float(self.h_org - self.h_crop)
         # self.x_ratio = float(self.w_net) / float(self.w_org)
         # self.y_ratio = float(self.h_net) / float(self.h_org - self.h_crop)
         self.top_view_region = args.top_view_region
+
+
+        self.lane_width = 2# args.lane_width
+        
+        self.max_lanes = args.max_lanes
+        self.S = args.S
+        self.n_strips = self.S - 1
+        self.n_offsets = self.S
+        self.strip_size = self.h_net / self.n_strips
+        self.offsets_ys = np.arange(self.h_net, -1, -self.strip_size)
 
         self.K = args.K
         self.H_crop = homography_crop_resize([args.org_h, args.org_w], args.crop_y, [args.resize_h, args.resize_w])
@@ -73,7 +87,7 @@ class LaneDataset(Dataset):
                                                                [0, self.ipm_h-1],
                                                                [self.ipm_w-1, self.ipm_h-1]]),
                                                    np.float32(args.top_view_region))
-        # self.H_g2ipm = np.linalg.inv(H_ipm2g)
+        self.H_g2ipm = np.linalg.inv(self.H_ipm2g)
 
         if args.fix_cam:
             self.fix_cam = True
@@ -89,13 +103,124 @@ class LaneDataset(Dataset):
             self.fix_cam = False
 
         # compute anchor steps
-        x_min = self.top_view_region[0, 0]
-        x_max = self.top_view_region[1, 0]
-        self.x_min = x_min
-        self.x_max = x_max
-        self.anchor_x_steps = np.linspace(x_min, x_max, np.int(args.ipm_w/8), endpoint=True)
-        self.anchor_y_steps = args.anchor_y_steps
-        self.num_y_steps = len(self.anchor_y_steps)
+        self.use_default_anchor = args.use_default_anchor
+        self.new_match = args.new_match
+        if self.new_match:
+            self.match_dist_thre_3d = args.match_dist_thre_3d
+        if self.use_default_anchor:
+            x_min = self.top_view_region[0, 0]
+            x_max = self.top_view_region[1, 0]
+            self.x_min = x_min
+            self.x_max = x_max
+            self.anchor_x_steps = np.linspace(x_min, x_max, np.int(args.ipm_w/8), endpoint=True)
+            self.anchor_y_steps = args.anchor_y_steps
+            self.num_y_steps = len(self.anchor_y_steps)
+            self.anchor_num = np.int32(self.ipm_w / 8)
+
+            args.fmap_mapping_interp_index = None
+            args.fmap_mapping_interp_weight = None
+        else:
+            self.x_min, self.x_max = self.top_view_region[0, 0], self.top_view_region[1, 0]
+            self.y_min, self.y_max = self.top_view_region[2, 1], self.top_view_region[0, 1]
+            self.anchor_num_before_shear = self.ipm_w // 8
+            self.anchor_x_steps = np.linspace(self.x_min, self.x_max, self.anchor_num_before_shear, endpoint=True)
+            self.anchor_y_steps = args.anchor_y_steps
+            self.num_y_steps = len(self.anchor_y_steps)
+
+            # use only by draw ipm
+            # self.num_y_steps_bev = args.num_y_steps
+            
+            # compute anchor grid with different far center points
+            # currently, anchor grid consists of [center, left-sheared, right-sheared] concatenated
+            self.anchor_num = self.anchor_num_before_shear * 7
+            self.anchor_grid_x = np.repeat(np.expand_dims(self.anchor_x_steps, axis=1), self.num_y_steps, axis=1)  # center
+            anchor_grid_y = np.repeat(np.expand_dims(self.anchor_y_steps, axis=0), self.anchor_num_before_shear, axis=0)
+            
+            x2y_ratio = self.x_min / (self.y_max - self.y_min)  # x change per unit y change (for left-sheared anchors)
+            anchor_grid_x_left_10 = (anchor_grid_y - self.y_min) * x2y_ratio + self.anchor_grid_x
+            # right-sheared anchors are symmetrical to left-sheared ones
+            anchor_grid_x_right_10 = np.flip(-anchor_grid_x_left_10, axis=0)
+            x2y_ratio = (self.x_min - self.x_max) / (self.y_max - self.y_min)  # x change per unit y change (for left-sheared anchors)
+            anchor_grid_x_left_20 = (anchor_grid_y - self.y_min) * x2y_ratio + self.anchor_grid_x
+            # right-sheared anchors are symmetrical to left-sheared ones
+            anchor_grid_x_right_20 = np.flip(-anchor_grid_x_left_20, axis=0)
+            x2y_ratio = 2.0 * (self.x_min - self.x_max) / (self.y_max - self.y_min)  # x change per unit y change (for left-sheared anchors)
+            anchor_grid_x_left_40 = (anchor_grid_y - self.y_min) * x2y_ratio + self.anchor_grid_x
+            # right-sheared anchors are symmetrical to left-sheared ones
+            anchor_grid_x_right_40 = np.flip(-anchor_grid_x_left_40, axis=0)
+            # concat the three parts
+            self.anchor_grid_x = np.concatenate((self.anchor_grid_x, 
+                                                anchor_grid_x_left_10, anchor_grid_x_right_10,
+                                                anchor_grid_x_left_20, anchor_grid_x_right_20,
+                                                anchor_grid_x_left_40, anchor_grid_x_right_40), axis=0)
+            args.anchor_grid_x = self.anchor_grid_x
+
+            # compute mapping and linear interpolation for sheared feature maps
+            fmap_height, fmap_width = args.ipm_h // 8-4, self.anchor_num_before_shear
+            fmap_u_steps = np.arange(fmap_width) + 0.5
+            fmap_grid_u = np.repeat(np.expand_dims(fmap_u_steps, axis=0), fmap_height, axis=0)
+            fmap_v_steps = np.arange(fmap_height)
+            fmap_grid_v = np.repeat(np.expand_dims(fmap_v_steps, axis=1), fmap_width, axis=1)
+            fmap_u2v_ratio = 0.5 * fmap_width / fmap_height  # u change per unit v change, 8/26-->208/8=26
+            fmap_mapping_left_10 = fmap_grid_u - fmap_u2v_ratio * (22 - fmap_grid_v)  # float u index to access
+            fmap_mapping_right_10 = fmap_grid_u + fmap_u2v_ratio * (22 - fmap_grid_v)
+            fmap_u2v_ratio = fmap_width / fmap_height  # u change per unit v change, 16/26
+            fmap_mapping_left_20 = fmap_grid_u - fmap_u2v_ratio * (22 - fmap_grid_v)  # float u index to access
+            fmap_mapping_right_20 = fmap_grid_u + fmap_u2v_ratio * (22 - fmap_grid_v)
+            fmap_u2v_ratio = 2 * fmap_width / fmap_height  # u change per unit v change, 32/26
+            fmap_mapping_left_40 = fmap_grid_u - fmap_u2v_ratio * (22 - fmap_grid_v)  # float u index to access
+            fmap_mapping_right_40 = fmap_grid_u + fmap_u2v_ratio * (22 - fmap_grid_v)
+            
+            fmap_mapping_left_10_interp_index = np.zeros((fmap_height, fmap_width, 2), dtype=int)
+            fmap_mapping_left_10_interp_weight = np.zeros((fmap_height, fmap_width, 2))
+            fmap_mapping_right_10_interp_index = np.zeros((fmap_height, fmap_width, 2), dtype=int)
+            fmap_mapping_right_10_interp_weight = np.zeros((fmap_height, fmap_width, 2))
+            fmap_mapping_left_20_interp_index = np.zeros((fmap_height, fmap_width, 2), dtype=int)
+            fmap_mapping_left_20_interp_weight = np.zeros((fmap_height, fmap_width, 2))
+            fmap_mapping_right_20_interp_index = np.zeros((fmap_height, fmap_width, 2), dtype=int)
+            fmap_mapping_right_20_interp_weight = np.zeros((fmap_height, fmap_width, 2))
+            fmap_mapping_left_40_interp_index = np.zeros((fmap_height, fmap_width, 2), dtype=int)
+            fmap_mapping_left_40_interp_weight = np.zeros((fmap_height, fmap_width, 2))
+            fmap_mapping_right_40_interp_index = np.zeros((fmap_height, fmap_width, 2), dtype=int)
+            fmap_mapping_right_40_interp_weight = np.zeros((fmap_height, fmap_width, 2))
+            for i in range(fmap_height):
+                for j in range(fmap_width):
+                    if fmap_mapping_left_10[i, j] >= 0.5 and fmap_mapping_left_10[i, j] < fmap_width-0.5:
+                        low_bound = np.floor(fmap_mapping_left_10[i, j] + 0.5) - 0.5
+                        up_bound = low_bound + 1
+                        fmap_mapping_left_10_interp_index[i, j, :] = np.array([low_bound-0.5, up_bound-0.5])
+                        fmap_mapping_left_10_interp_weight[i, j, :] = np.array([up_bound-fmap_mapping_left_10[i, j], fmap_mapping_left_10[i, j]-low_bound])
+                    if fmap_mapping_right_10[i, j] >= 0.5 and fmap_mapping_right_10[i, j] < fmap_width-0.5:
+                        low_bound = np.floor(fmap_mapping_right_10[i, j] + 0.5) - 0.5
+                        up_bound = low_bound + 1
+                        fmap_mapping_right_10_interp_index[i, j, :] = np.array([low_bound-0.5, up_bound-0.5])
+                        fmap_mapping_right_10_interp_weight[i, j, :] = np.array([up_bound-fmap_mapping_right_10[i, j], fmap_mapping_right_10[i, j]-low_bound])
+                    if fmap_mapping_left_20[i, j] >= 0.5 and fmap_mapping_left_20[i, j] < fmap_width-0.5:
+                        low_bound = np.floor(fmap_mapping_left_20[i, j] + 0.5) - 0.5
+                        up_bound = low_bound + 1
+                        fmap_mapping_left_20_interp_index[i, j, :] = np.array([low_bound-0.5, up_bound-0.5])
+                        fmap_mapping_left_20_interp_weight[i, j, :] = np.array([up_bound-fmap_mapping_left_20[i, j], fmap_mapping_left_20[i, j]-low_bound])
+                    if fmap_mapping_right_20[i, j] >= 0.5 and fmap_mapping_right_20[i, j] < fmap_width-0.5:
+                        low_bound = np.floor(fmap_mapping_right_20[i, j] + 0.5) - 0.5
+                        up_bound = low_bound + 1
+                        fmap_mapping_right_20_interp_index[i, j, :] = np.array([low_bound-0.5, up_bound-0.5])
+                        fmap_mapping_right_20_interp_weight[i, j, :] = np.array([up_bound-fmap_mapping_right_20[i, j], fmap_mapping_right_20[i, j]-low_bound])
+                    if fmap_mapping_left_40[i, j] >= 0.5 and fmap_mapping_left_40[i, j] < fmap_width-0.5:
+                        low_bound = np.floor(fmap_mapping_left_40[i, j] + 0.5) - 0.5
+                        up_bound = low_bound + 1
+                        fmap_mapping_left_40_interp_index[i, j, :] = np.array([low_bound-0.5, up_bound-0.5])
+                        fmap_mapping_left_40_interp_weight[i, j, :] = np.array([up_bound-fmap_mapping_left_40[i, j], fmap_mapping_left_40[i, j]-low_bound])
+                    if fmap_mapping_right_40[i, j] >= 0.5 and fmap_mapping_right_40[i, j] < fmap_width-0.5:
+                        low_bound = np.floor(fmap_mapping_right_40[i, j] + 0.5) - 0.5
+                        up_bound = low_bound + 1
+                        fmap_mapping_right_40_interp_index[i, j, :] = np.array([low_bound-0.5, up_bound-0.5])
+                        fmap_mapping_right_40_interp_weight[i, j, :] = np.array([up_bound-fmap_mapping_right_40[i, j], fmap_mapping_right_40[i, j]-low_bound])
+            args.fmap_mapping_interp_index = np.concatenate((fmap_mapping_left_10_interp_index, fmap_mapping_right_10_interp_index,
+                                                            fmap_mapping_left_20_interp_index, fmap_mapping_right_20_interp_index,
+                                                            fmap_mapping_left_40_interp_index, fmap_mapping_right_40_interp_index), axis=1)
+            args.fmap_mapping_interp_weight = np.concatenate((fmap_mapping_left_10_interp_weight, fmap_mapping_right_10_interp_weight,
+                                                            fmap_mapping_left_20_interp_weight, fmap_mapping_right_20_interp_weight,
+                                                            fmap_mapping_left_40_interp_weight, fmap_mapping_right_40_interp_weight), axis=1)
 
         if self.no_centerline:
             self.num_types = 1
@@ -136,6 +261,8 @@ class LaneDataset(Dataset):
                 self._gt_centerline_im_all, \
                 self._im_anchor_origins, \
                 self._im_anchor_angles = self.init_dataset_3D(dataset_base_dir, json_file_path)
+            args.im_anchor_origins = self._im_anchor_origins
+            args.im_anchor_angles = self._im_anchor_angles
         self.n_samples = self._label_image_path.shape[0]
         # print('self.n_samples',self.n_samples)
 
@@ -181,7 +308,7 @@ class LaneDataset(Dataset):
         image = F.crop(image, int(self.h_crop*resize), 0, int((self.h_org-self.h_crop)*resize), int(self.w_org*resize))
         
 
-        gt_anchor = np.zeros([np.int32(self.ipm_w / 8), self.num_types, self.anchor_dim], dtype=np.float32)
+        gt_anchor = np.zeros([self.anchor_num, self.num_types, self.anchor_dim], dtype=np.float32)
         gt_lanes = self._label_laneline_all[idx]
         gt_vis_inds = self._gt_laneline_visibility_all[idx]
         for i in range(len(gt_lanes)):
@@ -258,7 +385,7 @@ class LaneDataset(Dataset):
         ##############################
         
         
-        gt_anchor = gt_anchor.reshape([np.int32(self.ipm_w / 8), -1])
+        gt_anchor = gt_anchor.reshape([self.anchor_num, -1])
         gt_anchor = torch.from_numpy(gt_anchor)
         
         
@@ -276,14 +403,20 @@ class LaneDataset(Dataset):
         # prepare binary segmentation label map
         seg_label = np.zeros((self.h_net, self.w_net), dtype=np.int8)
         gt_lanes = self._label_laneline_all_org[idx]
+        gt_laneline_img = [0] * len(gt_lanes)
         for i, lane in enumerate(gt_lanes):
             # project lane3d to image
             if self.no_3d:
                 x_2d = lane[:, 0]
                 y_2d = lane[:, 1]
+                H_g2im, P_g2im, H_crop, H_im2ipm = self.transform_mats(idx)
+                # update transformation with image augmentation
+                M = H_crop
                 # update transformation with image augmentation
                 if self.data_aug:
-                    x_2d, y_2d = homographic_transformation(aug_mat, x_2d, y_2d)
+                    M = np.matmul(aug_mat, M)
+                x_2d, y_2d = homographic_transformation(M, x_2d, y_2d)
+                gt_laneline_img[i] = np.array([x_2d, y_2d]).T.tolist()
             else:
                 H_g2im, P_g2im, H_crop, H_im2ipm = self.transform_mats(idx)
                 M = np.matmul(H_crop, P_g2im)
@@ -292,20 +425,42 @@ class LaneDataset(Dataset):
                     M = np.matmul(aug_mat, M)
                 x_2d, y_2d = projective_transformation(M, lane[:, 0],
                                                        lane[:, 1], lane[:, 2])
+                gt_laneline_img[i] = np.array([x_2d, y_2d]).T.tolist()
             for j in range(len(x_2d) - 1):
                 seg_label = cv2.line(seg_label,
                                      (int(x_2d[j]), int(y_2d[j])), (int(x_2d[j+1]), int(y_2d[j+1])),
                                      color=np.asscalar(np.array([1])))
         seg_label = torch.from_numpy(seg_label.astype(np.float32))
         seg_label.unsqueeze_(0)
-        
 
-        if self.data_aug:
-            aug_mat = torch.from_numpy(aug_mat.astype(np.float32))
-            return torch.stack([image]), seg_label, gt_anchor, idx, gt_cam_height, gt_cam_pitch, aug_mat,\
-            torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]), torch.stack([post_tran_ret])
-        return torch.stack([image]), seg_label, gt_anchor, idx, gt_cam_height, gt_cam_pitch,\
-            torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]), torch.stack([post_tran_ret])
+        gt_laneline_img = self.transform_annotation(gt_laneline_img, img_wh=(self.w_net, self.h_net))
+        gt_laneline_img = torch.from_numpy(gt_laneline_img.astype(np.float32))
+
+        
+        if self.seg_bev:
+            gt_anchor_bev = np.copy(gt_anchor)
+            unormalize_lane_anchor(gt_anchor_bev, self)
+            seg_bev_map = np.zeros((self.ipm_h, self.ipm_w), dtype=np.int8)
+            seg_bev_map = self.draw_on_ipm_seg_bev(seg_bev_map, gt_anchor_bev, width=self.lane_width)
+            seg_bev_map = torch.from_numpy(seg_bev_map.astype(np.float32))
+            seg_bev_map.unsqueeze_(0)
+        
+        if self.seg_bev:
+            if self.data_aug:
+                aug_mat = torch.from_numpy(aug_mat.astype(np.float32))
+                return torch.stack([image]), seg_label, gt_anchor, gt_laneline_img, idx, gt_cam_height, gt_cam_pitch, aug_mat,\
+                torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]),\
+                     torch.stack([post_tran_ret]),seg_bev_map
+            return torch.stack([image]), seg_label, gt_anchor, gt_laneline_img, idx, gt_cam_height, gt_cam_pitch,\
+                    torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]),\
+                         torch.stack([post_tran_ret]), seg_bev_map
+        else:
+            if self.data_aug:
+                aug_mat = torch.from_numpy(aug_mat.astype(np.float32))
+                return torch.stack([image]), seg_label, gt_anchor,gt_laneline_img, idx, gt_cam_height, gt_cam_pitch, aug_mat,\
+                torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]), torch.stack([post_tran_ret])
+            return torch.stack([image]), seg_label, gt_anchor,gt_laneline_img, idx, gt_cam_height, gt_cam_pitch,\
+                    torch.stack([rot_cam2ego]), torch.stack([trans_cam2ego]),  torch.stack([post_rot_ret]), torch.stack([post_tran_ret])
 
     def init_dataset_3D(self, dataset_base_dir, json_file_path):
         """
@@ -444,12 +599,12 @@ class LaneDataset(Dataset):
             gt_lanes = [lane for lane in gt_lanes if lane.shape[0] > 1]
             
             # project gt laneline to image plane
-            gt_laneline_im = []
-            for gt_lane in gt_lanes:
-                x_vals, y_vals = projective_transformation(P_g2im, gt_lane[:,0], gt_lane[:,1], gt_lane[:,2])
-                gt_laneline_im_oneline = np.array([x_vals, y_vals]).T.tolist()
-                gt_laneline_im.append(gt_laneline_im_oneline)
-            gt_laneline_im_all.append(gt_laneline_im)
+            # gt_laneline_im = []
+            # for gt_lane in gt_lanes:
+            #     x_vals, y_vals = projective_transformation(P_g2im, gt_lane[:,0], gt_lane[:,1], gt_lane[:,2])
+            #     gt_laneline_im_oneline = np.array([x_vals, y_vals]).T.tolist()
+            #     gt_laneline_im.append(gt_laneline_im_oneline)
+            # gt_laneline_im_all.append(gt_laneline_im)
 
             # convert 3d lanes to flat ground space
             self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
@@ -489,11 +644,11 @@ class LaneDataset(Dataset):
                 gt_lanes = [lane for lane in gt_lanes if lane.shape[0] > 1]
 
                 # project gt centerline to image plane
-                gt_centerline_im = []
-                for gt_lane in gt_lanes:
-                    x_vals, y_vals = projective_transformation(P_g2im, gt_lane[:,0], gt_lane[:,1], gt_lane[:,2])
-                    gt_centerline_im.append(np.array([x_vals, y_vals]).T.tolist())
-                gt_centerline_im_all.append(gt_laneline_im)
+                # gt_centerline_im = []
+                # for gt_lane in gt_lanes:
+                #     x_vals, y_vals = projective_transformation(P_g2im, gt_lane[:,0], gt_lane[:,1], gt_lane[:,2])
+                #     gt_centerline_im.append(np.array([x_vals, y_vals]).T.tolist())
+                # gt_centerline_im_all.append(gt_laneline_im)
 
                 # convert 3d lanes to flat ground space
                 self.convert_lanes_3d_to_gflat(gt_lanes, P_g2gflat)
@@ -783,6 +938,132 @@ class LaneDataset(Dataset):
             return H_g2im, P_g2im, self.H_crop, H_im2ipm
         else:
             return self.H_g2im, self.P_g2im, self.H_crop, self.H_im2ipm
+
+    def filter_lane(self, lane):
+        assert lane[-1][1] <= lane[0][1]
+        filtered_lane = []
+        used = set()
+        for p in lane:
+            if p[1] not in used:
+                filtered_lane.append(p)
+                used.add(p[1])
+
+        return filtered_lane
+
+
+    def transform_annotation(self, anno, img_wh):
+        # net size: self.h_net, self.w_net
+        img_w, img_h = img_wh
+
+        old_lanes = anno.copy()
+
+        # removing lanes with less than 2 points
+        old_lanes = filter(lambda x: len(x) > 1, old_lanes)
+        # sort lane points by Y (bottom to top of the image)
+        old_lanes = [sorted(lane, key=lambda x: -x[1]) for lane in old_lanes]
+        # remove points with same Y (keep first occurrence)
+        old_lanes = [self.filter_lane(lane) for lane in old_lanes]
+        # normalize the annotation coordinates
+        old_lanes = [[[x * self.w_net / float(img_w), y * self.h_net / float(img_h)] for x, y in lane]
+                     for lane in old_lanes]
+        # create tranformed annotations
+        # lanes = np.ones((self.max_lanes, 2 + 1 + 1 + 1 + self.n_offsets),
+        #                 dtype=np.float32) * -1e5  # 2 scores, 1 start_y, 1 start_x, 1 length, S+1 coordinates
+        
+        # valid, 1 start_y, 1 start_x, S coordinates, S visiblity
+        lanes = np.ones((self.max_lanes, 1 + 1 + 1 + 2 * self.n_offsets),
+                         dtype=np.float32) * -1e5
+        # lanes are invalid and all points are invisible by default
+        lanes[:, 0] = 0
+        # lanes[:, 1] = 0
+        lanes[:, 3+self.n_offsets:] = 0 #visability values
+        for lane_idx, lane in enumerate(old_lanes):
+            try:
+                # xs_outside_image, xs_inside_image = self.sample_lane(lane, self.offsets_ys)
+                xs_outside_image, xs_inside_image, interp_xs_length, extrap_ys_length = \
+                    self.sample_lane(lane, self.offsets_ys)
+            except AssertionError:
+                # print("Sample lane error with #{} lane".format(lane_idx))
+                continue
+            if len(xs_inside_image) == 0:
+                continue
+            all_xs = np.hstack((xs_outside_image, xs_inside_image))
+            # lanes[lane_idx, 0] = 0
+            # lanes[lane_idx, 1] = 1
+            # lanes[lane_idx, 2] = len(xs_outside_image) / self.n_strips
+            # lanes[lane_idx, 3] = xs_inside_image[0]
+            # lanes[lane_idx, 4] = len(xs_inside_image)
+            # lanes[lane_idx, 5:5 + len(all_xs)] = all_xs
+            
+            lanes[lane_idx, 0] = 1
+            lanes[lane_idx, 1] = len(xs_outside_image) / self.n_strips
+            lanes[lane_idx, 2] = xs_inside_image[0]
+            lanes[lane_idx, 3 : 1 + 2 + len(all_xs)] = all_xs
+            # print("extrap_ys_length: ", extrap_ys_length)
+            # print("len of xs_inside_image: ", len(xs_inside_image))
+            lanes[lane_idx, 1+ 2 + self.n_offsets + extrap_ys_length: 
+                            1 + 2 + self.n_offsets +
+                                min(len(all_xs), self.n_offsets)] = 1
+        new_anno = lanes.copy()
+        # print("label.size in transform_annotation: ", np.shape(new_anno))
+        return new_anno
+
+    def sample_lane(self, points, sample_ys):
+        # this function expects the points to be sorted
+        points = np.array(points)
+        if not np.all(points[1:, 1] < points[:-1, 1]):
+            raise Exception('Annotaion points have to be sorted')
+        x, y = points[:, 0], points[:, 1]
+
+        # interpolate points inside domain
+        # BUG remains here: https://github.com/lucastabelini/LaneATT/issues/10
+        assert len(points) > 1
+        interp = UnivariateSpline(y[::-1], x[::-1], k=min(3, len(points) - 1))
+        domain_min_y = y.min()
+        domain_max_y = y.max()
+        sample_ys_inside_domain = sample_ys[(sample_ys >= domain_min_y) & (sample_ys <= domain_max_y)]
+        assert len(sample_ys_inside_domain) > 0
+        interp_xs = interp(sample_ys_inside_domain)
+
+        # extrapolate lane to the bottom of the image with a straight line using the 2 points closest to the bottom
+        num_points_selected = min(10, np.shape(points)[0])
+        two_closest_points = points[:num_points_selected]
+        extrap = np.polyfit(two_closest_points[:, 1], two_closest_points[:, 0], deg=2)
+        extrap_ys = sample_ys[sample_ys > domain_max_y]
+        extrap_xs = np.polyval(extrap, extrap_ys)
+        all_xs = np.hstack((extrap_xs, interp_xs))
+
+        interp_xs_length = np.shape(interp_xs)[0]
+        extrap_ys_length = np.shape(extrap_ys)[0]
+
+        # separate between inside and outside points
+        inside_mask = (all_xs >= 0) & (all_xs < self.w_net)
+        xs_inside_image = all_xs[inside_mask]
+        xs_outside_image = all_xs[~inside_mask]
+
+        return xs_outside_image, xs_inside_image, interp_xs_length, extrap_ys_length
+
+    def draw_on_ipm_seg_bev(self, im_ipm, lane_anchor, draw_type='laneline', color=np.asscalar(np.array([1])), width=1):
+        for j in range(lane_anchor.shape[0]):
+            # draw laneline
+            # if draw_type is 'laneline' and lane_anchor[j, self.anchor_dim - 1] > self.prob_th:
+            if draw_type == 'laneline' and \
+                np.argmax(lane_anchor[j, self.anchor_dim-1:self.anchor_dim]) != 0:
+                # np.max(lane_anchor[j, self.anchor_dim-self.num_category+1:self.anchor_dim]) > 0.1:
+                x_offsets = lane_anchor[j, :self.num_y_steps]
+                x_g = x_offsets + self.anchor_grid_x[j]
+                # compute lanelines in ipm view
+                x_ipm, y_ipm = homographic_transformation(self.H_g2ipm, x_g, self.anchor_y_steps)
+                if not self.use_default_anchor:
+                    anchor_x_ipm, _ = homographic_transformation(self.H_g2ipm, self.anchor_grid_x[j], self.anchor_y_steps)
+                x_ipm = x_ipm.astype(np.int)
+                y_ipm = y_ipm.astype(np.int)
+                if not self.use_default_anchor:
+                    anchor_x_ipm = anchor_x_ipm.astype(np.int)
+                for k in range(1, x_g.shape[0]):
+                    im_ipm = cv2.line(im_ipm, (x_ipm[k - 1], y_ipm[k - 1]),
+                                    (x_ipm[k], y_ipm[k]), color, width)
+        return im_ipm
 
 
 def make_lane_y_mono_inc(lane):

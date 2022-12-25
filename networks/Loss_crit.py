@@ -131,21 +131,23 @@ class Laneline_loss_gflat_3D(nn.Module):
     loss2: sum of geometric distance betwen 3D lane anchor points in X and Z offsets
     loss3: error in estimating pitch and camera heights
     """
-    def __init__(self, batch_size, num_types, anchor_x_steps, anchor_y_steps, x_off_std, y_off_std, z_std, pred_cam=False, no_cuda=False):
+    def __init__(self, batch_size,anchor_num, num_types, anchor_x_steps, anchor_y_steps, x_off_std, y_off_std, z_std, pred_cam=False, no_cuda=False):
         super(Laneline_loss_gflat_3D, self).__init__()
         self.batch_size = batch_size
         self.num_types = num_types
+        print('x_off_std',x_off_std.shape)
         self.num_x_steps = anchor_x_steps.shape[0]
         self.num_y_steps = anchor_y_steps.shape[0]
         self.anchor_dim = 3*self.num_y_steps + 1
         self.pred_cam = pred_cam
+        self.anchor_num = anchor_num
 
         # prepare broadcast anchor_x_tensor, anchor_y_tensor, std_X, std_Y, std_Z
-        tmp_zeros = torch.zeros(self.batch_size, self.num_x_steps, self.num_types, self.num_y_steps)
+        tmp_zeros = torch.zeros(self.batch_size, self.anchor_num, self.num_types, self.num_y_steps)
         self.x_off_std = torch.tensor(x_off_std.astype(np.float32)).reshape(1, 1, 1, self.num_y_steps) + tmp_zeros
         self.y_off_std = torch.tensor(y_off_std.astype(np.float32)).reshape(1, 1, 1, self.num_y_steps) + tmp_zeros
         self.z_std = torch.tensor(z_std.astype(np.float32)).reshape(1, 1, 1, self.num_y_steps) + tmp_zeros
-        self.anchor_x_tensor = torch.tensor(anchor_x_steps.astype(np.float32)).reshape(1, self.num_x_steps, 1, 1) + tmp_zeros
+        self.anchor_x_tensor = torch.tensor(anchor_x_steps.astype(np.float32)).reshape(1, self.anchor_num, 1, self.num_y_steps) + tmp_zeros
         self.anchor_y_tensor = torch.tensor(anchor_y_steps.astype(np.float32)).reshape(1, 1, 1, self.num_y_steps) + tmp_zeros
         self.anchor_x_tensor = self.anchor_x_tensor/self.x_off_std
         self.anchor_y_tensor = self.anchor_y_tensor/self.y_off_std
@@ -306,7 +308,7 @@ class Laneline_loss_gflat_3D(nn.Module):
         loss5 = self.calParrallelismLoss(pred_Xoff, pred_Yoff, pred_Z, gt_class, gt_visibility)
 
         # if not self.pred_cam:
-        return loss0+loss1+loss2 + loss5 #+loss3
+        return loss0+loss1+loss2 + loss5, {'vis_loss': loss0, 'prob_loss': loss1, 'reg_loss': loss2+loss5}#, 'cam_pred_loss': loss3} #+loss3
         # loss4 = torch.sum(torch.abs(gt_pitch-pred_pitch)) + torch.sum(torch.abs(gt_hcam-pred_hcam))
         # return loss0+loss1+loss3+loss4+loss5 #+loss2
 
