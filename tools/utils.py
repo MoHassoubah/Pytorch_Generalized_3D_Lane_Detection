@@ -239,6 +239,7 @@ def sim3d_config(args):
     args._2d_reg_loss_weight = 0.0 # -4.6052
     args._seg_loss_weight = 0.0 # -2.3026
     args.num_category = 1
+    args.loss_seg_weight = 0.0
 
 
 class Visualizer:

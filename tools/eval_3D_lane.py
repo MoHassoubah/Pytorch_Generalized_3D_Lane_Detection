@@ -110,6 +110,7 @@ class LaneEval(object):
         gt_visibility_mat = np.zeros((cnt_gt, 100))
         pred_visibility_mat = np.zeros((cnt_pred, 100))
         # resample gt and pred at y_samples
+        # print('>>>>>>>>>>>>>cnt_gt',cnt_gt)
         for i in range(cnt_gt):
             min_y = np.min(np.array(gt_lanes[i])[:, 1])
             max_y = np.max(np.array(gt_lanes[i])[:, 1])
@@ -121,7 +122,7 @@ class LaneEval(object):
                                                                     np.logical_and(self.y_samples >= min_y,
                                                                                    self.y_samples <= max_y)))
             gt_visibility_mat[i, :] = np.logical_and(gt_visibility_mat[i, :], visibility_vec)
-
+        # print('>>>>>>>>>>>>>cnt_pred',cnt_pred)
         for i in range(cnt_pred):
             # # ATTENTION: ensure y mono increase before interpolation: but it can reduce size
             # pred_lanes[i] = make_lane_y_mono_inc(np.array(pred_lanes[i]))
@@ -131,6 +132,7 @@ class LaneEval(object):
             x_values, z_values, visibility_vec = resample_laneline_in_y(np.array(pred_lanes[i]), self.y_samples,
                                                                         out_vis=True)
             pred_lanes[i] = np.vstack([x_values, z_values]).T
+            # print('pred_lanes[i]>>>>>>>>>>>>>>>',pred_lanes[i].sum())
             pred_visibility_mat[i, :] = np.logical_and(x_values >= self.x_min,
                                                        np.logical_and(x_values <= self.x_max,
                                                                       np.logical_and(self.y_samples >= min_y,
@@ -357,6 +359,9 @@ class LaneEval(object):
             # evaluate lanelines
             gt_lanelines = gt['laneLines']
             gt_visibility = gt['laneLines_visibility']
+
+            # print('pred_lanelines', len(pred_lanelines))
+            # print('gt_lanelines', len(gt_lanelines))
             # N to N matching of lanelines
             r_lane, p_lane, cnt_gt, cnt_pred, \
             x_error_very_close, x_error_close, x_error_far, z_error_very_close,\
@@ -386,6 +391,9 @@ class LaneEval(object):
 
                 gt_centerlines = gt['centerLines']
                 gt_visibility = gt['centerLines_visibility']
+
+                # print('pred_centerlines', len(pred_centerlines))
+                # print('gt_centerlines', len(gt_centerlines))
 
                 # N to N matching of lanelines
                 r_lane, p_lane, cnt_gt, cnt_pred, x_error_very_close,\

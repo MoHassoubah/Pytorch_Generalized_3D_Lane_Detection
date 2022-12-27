@@ -1249,12 +1249,16 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         An important process is output lanes in the considered y-range. Interpolate the visibility attributes to 
         automatically determine whether to extend the lanes.
     """
+    # print('>>>>>>>>>>>>>>>>>>pred_anchor.shape[0]',pred_anchor.shape[0])
     for j in range(pred_anchor.shape[0]):
         # draw laneline
         x_offsets = pred_anchor[j, :num_y_steps]
         x_g = x_offsets + anchor_x_steps[j]
+        # print('xg',x_g.sum())
         z_g = pred_anchor[j, num_y_steps:2*num_y_steps]
+        # print('z_g',z_g.sum())
         visibility = pred_anchor[j, 2*num_y_steps:3*num_y_steps]
+        # print('visibility',visibility.sum())
         line = np.vstack([x_g, anchor_y_steps, z_g]).T
         # line = line[visibility > prob_th, :]
         # convert to 3D ground space
@@ -1269,8 +1273,11 @@ def compute_3d_lanes_all_prob(pred_anchor, anchor_dim, anchor_x_steps, anchor_y_
         # draw centerline
         x_offsets = pred_anchor[j, anchor_dim:anchor_dim + num_y_steps]
         x_g = x_offsets + anchor_x_steps[j]
+        # print('xg',x_g.sum())
         z_g = pred_anchor[j, anchor_dim + num_y_steps:anchor_dim + 2*num_y_steps]
+        # print('z_g',z_g.sum())
         visibility = pred_anchor[j, anchor_dim + 2*num_y_steps:anchor_dim + 3*num_y_steps]
+        # print('visibility',visibility.sum())
         line = np.vstack([x_g, anchor_y_steps, z_g]).T
         # line = line[visibility > prob_th, :]
         # convert to 3D ground space

@@ -117,7 +117,7 @@ def train_net():
     valid_dataset.normalize_lane_label()
     args.batch_size = 8
     valid_loader = get_loader(valid_dataset, args)
-    args.batch_size = 5
+    args.batch_size = 4
 
     # extract valid set labels for evaluation later
     global valid_set_labels
@@ -348,6 +348,8 @@ def train_net():
             # print('lr is set to {}'.format(lr))
             
         np.random.seed()
+        if epoch > args.seg_start_epoch:
+            args.loss_seg_weight = 10.0
 
         # Define container objects to keep track of multiple losses/metrics
         batch_time = AverageMeter()
@@ -485,7 +487,7 @@ def train_net():
         losses_valid, eval_stats = validate(valid_loader, valid_dataset, model,bceloss, criterion_val, vs_saver, val_gt_file, epoch)
 
         print("===> Average {}-loss on training set is {:.8f}".format(crit_string, lossestot.avg))
-        print("===> Average {}-loss on validation set is {:.8f}".format(crit_string, losses_valid))
+        print("===> Average {}-loss on validation set is {:.8f}".format(crit_string, losses_valid['loss_tot']))
         print("===> Evaluation laneline F-measure: {:3f}".format(eval_stats[0]))
         print("===> Evaluation laneline Recall: {:3f}".format(eval_stats[1]))
         print("===> Evaluation laneline Precision: {:3f}".format(eval_stats[2]))
@@ -639,6 +641,7 @@ def validate(loader, dataset, model,bceloss, criterion, vs_saver, val_gt_file, e
                     lanelines_pred, centerlines_pred, lanelines_prob, centerlines_prob = \
                         compute_3d_lanes_all_prob(lane_anchors, dataset.anchor_dim,
                                                   dataset.anchor_grid_x, args.anchor_y_steps, pred_hcam[j])
+                
                     json_line["laneLines"] = lanelines_pred #x,y,z, not offsets
                     json_line["centerLines"] = centerlines_pred
                     json_line["laneLines_prob"] = lanelines_prob
@@ -713,7 +716,7 @@ if __name__ == '__main__':
     args.prob_th = 0.5
     
     args.nepochs = 300
-    args.batch_size = 5
+    args.batch_size = 4
     
     # define the network model
     args.num_class = 2  # 1 background + n lane labels
