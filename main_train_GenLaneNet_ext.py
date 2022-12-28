@@ -505,7 +505,7 @@ def train_net():
             writer.add_scalars('TOT-Lane-Loss', {'Validation': losses_valid['loss_tot']}, epoch)
             writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid['loss_3d']}, epoch)
             writer.add_scalars('2D-Lane-Loss', {'Validation': losses_valid['loss_2d']}, epoch)
-            writer.add_scalars('2D-Lane-Loss', {'Validation': losses_valid['loss_seg']}, epoch)
+            writer.add_scalars('SEG-Lane-Loss', {'Validation': losses_valid['loss_seg']}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
             writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
         total_score = eval_stats[0]#losses_valid #losses.avg
