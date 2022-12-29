@@ -305,10 +305,10 @@ class Laneline_loss_gflat_3D(nn.Module):
         #         gt_class * torch.cat((gt_visibility, gt_visibility), 3) *
         #         (torch.cat((pred_Xoff, pred_Yoff), 3) - torch.cat((gt_Xoff, gt_Yoff), 3)), p=1, dim=3))
 
-        loss5 = self.calParrallelismLoss(pred_Xoff, pred_Yoff, pred_Z, gt_class, gt_visibility)
+        # loss5 = self.calParrallelismLoss(pred_Xoff, pred_Yoff, pred_Z, gt_class, gt_visibility)
 
         # if not self.pred_cam:
-        return loss0+loss1+loss2 + loss5, {'vis_loss': loss0, 'prob_loss': loss1, 'reg_loss': loss2+loss5}#, 'cam_pred_loss': loss3} #+loss3
+        return loss0+loss1+loss2 , {'vis_loss': loss0, 'prob_loss': loss1, 'reg_loss': loss2}#, 'cam_pred_loss': loss3} #+loss3
         # loss4 = torch.sum(torch.abs(gt_pitch-pred_pitch)) + torch.sum(torch.abs(gt_hcam-pred_hcam))
         # return loss0+loss1+loss3+loss4+loss5 #+loss2
 

@@ -372,7 +372,7 @@ class LaneATTHead(nn.Module):
         for (proposals, anchors, _, _), target in zip(proposals_list, targets):
             # Filter lanes that do not exist (confidence == 0)
             # target = target[target[:, 1] == 1]
-            target = target[target[:, 0] == 0]
+            target = target[target[:, 0] == 1]
             # in case no proposals when large nms suppression for test
             if len(proposals) == 0:
                 continue
@@ -417,7 +417,7 @@ class LaneATTHead(nn.Module):
                 target_positives = target[target_positives_indices]
                 cls_target = proposals.new_zeros(num_positives + num_negatives, self.num_category).long()
                 cls_target[:num_positives, :] = target_positives[:, :self.num_category]
-                cls_target[num_positives:, 0] = 1
+                cls_target[num_positives:, 0] = 0
             # print("cls_pred: ", cls_pred)
             # print("cls_target: ", cls_target)
             log_prob = F.log_softmax(cls_pred, dim=-1)
