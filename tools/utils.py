@@ -229,6 +229,7 @@ def sim3d_config(args):
     args.batch_norm = True
     args.feature_channels = 64
     args.seg_bev = True
+    args.use_default_anchor = True
     args.max_lanes = 6
     args.learnable_weight_on = False#True
     args._3d_vis_loss_weight = 0.0 # -2.3026

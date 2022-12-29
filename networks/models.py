@@ -406,22 +406,22 @@ class LiftSplatShoot(nn.Module):
         
         ################################
         effNetB0_dimList = [16, 24, 40, 112, 1280]
-        self.neck = nn.Sequential(*make_one_layer(effNetB0_dimList[0], args.feature_channels, batch_norm=True),
-                                  *make_one_layer(args.feature_channels, args.feature_channels, batch_norm=True))
-        # 2d lane detector
-        self.shared_encoder = FrontViewPathway(args.feature_channels, args.num_proj)
-        stride = 2
-        self.laneatt_head = LaneATTHead(stride * pow(2, args.num_proj - 1),
-                                               args.feature_channels * pow(2, args.num_proj - 2), # no change in last proj
-                                               args.im_anchor_origins,
-                                               args.im_anchor_angles,
-                                               img_w=args.resize_w,
-                                               img_h=args.resize_h,
-                                               S=args.S,
-                                               anchor_feat_channels=args.anchor_feat_channels,
-                                               num_category=1)
-        # segmentation head
-        self.segment_head = SegmentHead(channels=args.feature_channels)
+        # self.neck = nn.Sequential(*make_one_layer(effNetB0_dimList[0], args.feature_channels, batch_norm=True),
+        #                           *make_one_layer(args.feature_channels, args.feature_channels, batch_norm=True))
+        # # 2d lane detector
+        # self.shared_encoder = FrontViewPathway(args.feature_channels, args.num_proj)
+        # stride = 2
+        # self.laneatt_head = LaneATTHead(stride * pow(2, args.num_proj - 1),
+        #                                        args.feature_channels * pow(2, args.num_proj - 2), # no change in last proj
+        #                                        args.im_anchor_origins,
+        #                                        args.im_anchor_angles,
+        #                                        img_w=args.resize_w,
+        #                                        img_h=args.resize_h,
+        #                                        S=args.S,
+        #                                        anchor_feat_channels=args.anchor_feat_channels,
+        #                                        num_category=1)
+        # # segmentation head
+        # self.segment_head = SegmentHead(channels=args.feature_channels)
         # uncertainty loss weight
         self.uncertainty_loss = nn.Parameter(torch.tensor([args._3d_vis_loss_weight,
                                                             args._3d_prob_loss_weight,
@@ -564,28 +564,30 @@ class LiftSplatShoot(nn.Module):
 
 ##############################
         
-        out_featList = encoder_feat#self.encoder(input)
-        # print('out_featList', out_featList.shape)
-        neck_out = self.neck(out_featList)
-        # print('neck_out', neck_out.shape)
-        frontview_features = self.shared_encoder(neck_out)
-        '''
-            frontview_features_0 size: torch.Size([4, 128, 180, 240])
-            frontview_features_1 size: torch.Size([4, 256, 90, 120])
-            frontview_features_2 size: torch.Size([4, 512, 45, 60])
-            frontview_features_3 size: torch.Size([4, 512, 22, 30])
-        '''
-        frontview_final_feat = frontview_features[-1]
-        # print('frontview_final_feat', frontview_final_feat.shape)
+        # out_featList = encoder_feat#self.encoder(input)
+        # # print('out_featList', out_featList.shape)
+        # neck_out = self.neck(out_featList)
+        # # print('neck_out', neck_out.shape)
+        # frontview_features = self.shared_encoder(neck_out)
+        # '''
+        #     frontview_features_0 size: torch.Size([4, 128, 180, 240])
+        #     frontview_features_1 size: torch.Size([4, 256, 90, 120])
+        #     frontview_features_2 size: torch.Size([4, 512, 45, 60])
+        #     frontview_features_3 size: torch.Size([4, 512, 22, 30])
+        # '''
+        # frontview_final_feat = frontview_features[-1]
+        # # print('frontview_final_feat', frontview_final_feat.shape)
+        # frontview_final_feat torch.Size([4, 256, 16, 30])
 
-        laneatt_proposals_list = self.laneatt_head(frontview_final_feat)
 
-        # print('x before segmentation', x.shape)
-        # x2d = self.bevencode(x2d)
-        x2d = torch.sum(x,dim=2)
-        # print('x2d', x2d.shape)
-        pred_seg_bev_map = self.segment_head(x2d)
-        # print('pred_seg_bev_map', pred_seg_bev_map.shape)
+        # laneatt_proposals_list = self.laneatt_head(frontview_final_feat)
+
+        # # print('x before segmentation', x.shape)
+        # # x2d = self.bevencode(x2d)
+        # x2d = torch.sum(x,dim=2)
+        # # print('x2d', x2d.shape)
+        # pred_seg_bev_map = self.segment_head(x2d)
+        # # print('pred_seg_bev_map', pred_seg_bev_map.shape)
 
         # seperate loss weight
         uncertainty_loss = torch.tensor(1.0).to(x.device) * self.uncertainty_loss.to(x.device)
@@ -601,7 +603,7 @@ class LiftSplatShoot(nn.Module):
         x = self.lane_out(x)
         # print('final out shape')
         # print(out.shape)
-        return laneatt_proposals_list, pred_seg_bev_map, x, self.w_l1, self.w_ce,uncertainty_loss
+        return None, None, x, self.w_l1, self.w_ce,uncertainty_loss
 
 
 def compile_model(grid_conf, data_aug_conf, outC, num_y_steps, intrins,args):

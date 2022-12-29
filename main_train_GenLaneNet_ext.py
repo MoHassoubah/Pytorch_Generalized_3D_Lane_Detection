@@ -117,7 +117,7 @@ def train_net():
     valid_dataset.normalize_lane_label()
     args.batch_size = 8
     valid_loader = get_loader(valid_dataset, args)
-    args.batch_size = 4
+    args.batch_size = 5
 
     # extract valid set labels for evaluation later
     global valid_set_labels
@@ -427,20 +427,20 @@ def train_net():
             loss3d,loss_3d_dict = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
 
             # Add laneatt loss
-            loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
-                                                                    cls_loss_weight=args.cls_loss_weight,
-                                                                    reg_vis_loss_weight=args.reg_vis_loss_weight)
-            # segmentation loss
-            loss_seg = bceloss(pred_seg_bev_map, seg_bev_map)
+            # loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
+            #                                                         cls_loss_weight=args.cls_loss_weight,
+            #                                                         reg_vis_loss_weight=args.reg_vis_loss_weight)
+            # # segmentation loss
+            # loss_seg = bceloss(pred_seg_bev_map, seg_bev_map)
             # overall loss
-            loss = compute_loss(args, epoch, 
-                                loss3d, loss_att, loss_seg, 
-                                loss_3d_dict, loss_att_dict, uncertainty_loss)
+            loss = loss3d#compute_loss(args, epoch, 
+                                # loss3d, loss_att, loss_seg, 
+                                # loss_3d_dict, loss_att_dict, uncertainty_loss)
 
             lossestot.update(loss.item(), input.size(0))
-            losses3d.update(loss3d.item(), input.size(0))
-            losses2d.update(loss_att.item(), input.size(0))
-            lossesseg.update(loss_seg.item(), input.size(0))
+            # losses3d.update(loss3d.item(), input.size(0))
+            # losses2d.update(loss_att.item(), input.size(0))
+            # lossesseg.update(loss_seg.item(), input.size(0))
 
             # # Clip gradients (usefull for instabilities or mistakes in ground truth)
             # if args.clip_grad_norm != 0:
@@ -499,13 +499,13 @@ def train_net():
 
         if not args.no_tb:
             writer.add_scalars('TOT-Lane-Loss', {'Training': lossestot.avg}, epoch)
-            writer.add_scalars('3D-Lane-Loss', {'Training': losses3d.avg}, epoch)
-            writer.add_scalars('2D-Lane-Loss', {'Training': losses2d.avg}, epoch)
-            writer.add_scalars('SEG-Lane-Loss', {'Training': lossesseg.avg}, epoch)
+            # writer.add_scalars('3D-Lane-Loss', {'Training': losses3d.avg}, epoch)
+            # writer.add_scalars('2D-Lane-Loss', {'Training': losses2d.avg}, epoch)
+            # writer.add_scalars('SEG-Lane-Loss', {'Training': lossesseg.avg}, epoch)
             writer.add_scalars('TOT-Lane-Loss', {'Validation': losses_valid['loss_tot']}, epoch)
-            writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid['loss_3d']}, epoch)
-            writer.add_scalars('2D-Lane-Loss', {'Validation': losses_valid['loss_2d']}, epoch)
-            writer.add_scalars('SEG-Lane-Loss', {'Validation': losses_valid['loss_seg']}, epoch)
+            # writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid['loss_3d']}, epoch)
+            # writer.add_scalars('2D-Lane-Loss', {'Validation': losses_valid['loss_2d']}, epoch)
+            # writer.add_scalars('SEG-Lane-Loss', {'Validation': losses_valid['loss_seg']}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
             writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
         total_score = eval_stats[0]#losses_valid #losses.avg
@@ -585,20 +585,20 @@ def validate(loader, dataset, model,bceloss, criterion, vs_saver, val_gt_file, e
                 loss3d,loss_3d_dict = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
 
                 # Add laneatt loss
-                loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
-                                                                        cls_loss_weight=args.cls_loss_weight,
-                                                                        reg_vis_loss_weight=args.reg_vis_loss_weight)
-                # segmentation loss
-                loss_seg = bceloss(pred_seg_bev_map, seg_bev_map)
+                # loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
+                #                                                         cls_loss_weight=args.cls_loss_weight,
+                #                                                         reg_vis_loss_weight=args.reg_vis_loss_weight)
+                # # segmentation loss
+                # loss_seg = bceloss(pred_seg_bev_map, seg_bev_map)
                 # overall loss
-                loss = compute_loss(args, epoch, 
-                                    loss3d, loss_att, loss_seg, 
-                                    loss_3d_dict, loss_att_dict, uncertainty_loss)
+                loss = loss3d#compute_loss(args, epoch, 
+                                    # loss3d, loss_att, loss_seg, 
+                                    # loss_3d_dict, loss_att_dict, uncertainty_loss)
 
                 lossestot.update(loss.item(), input.size(0))
-                losses3d.update(loss3d.item(), input.size(0))
-                losses2d.update(loss_att.item(), input.size(0))
-                lossesseg.update(loss_seg.item(), input.size(0))
+                # losses3d.update(loss3d.item(), input.size(0))
+                # losses2d.update(loss_att.item(), input.size(0))
+                # lossesseg.update(loss_seg.item(), input.size(0))
 
                 pred_pitch = pred_pitch.data.cpu().numpy().flatten()
                 pred_hcam = pred_hcam.data.cpu().numpy().flatten()
@@ -674,7 +674,7 @@ def validate(loader, dataset, model,bceloss, criterion, vs_saver, val_gt_file, e
                                                                eval_stats[10], eval_stats[11],
                                                                eval_stats[12], eval_stats[13]))
 
-        return {'loss_tot':lossestot.avg,'loss_3d':losses3d.avg, 'loss_2d':losses2d.avg, 'loss_seg':lossesseg.avg}, eval_stats
+        return {'loss_tot':lossestot.avg}, eval_stats#,'loss_3d':losses3d.avg, 'loss_2d':losses2d.avg, 'loss_seg':lossesseg.avg}, eval_stats
 
 
 def save_checkpoint(state, to_copy, epoch):
@@ -716,7 +716,7 @@ if __name__ == '__main__':
     args.prob_th = 0.5
     
     args.nepochs = 300
-    args.batch_size = 4
+    args.batch_size = 5
     
     # define the network model
     args.num_class = 2  # 1 background + n lane labels
