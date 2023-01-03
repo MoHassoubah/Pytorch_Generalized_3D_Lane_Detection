@@ -369,6 +369,8 @@ class LaneATTHead(nn.Module):
         total_positives = 0
         batch_anchors_positives = []
         cnt = 0
+        error_cnt = -1
+        lst_positives = []
         for (proposals, anchors, _, _), target in zip(proposals_list, targets):
             # Filter lanes that do not exist (confidence == 0)
             # target = target[target[:, 1] == 1]
@@ -388,7 +390,7 @@ class LaneATTHead(nn.Module):
             with torch.no_grad():
                 anchors = anchors.to(device=target.device)
                 positives_mask, invalid_offsets_mask, negatives_mask, target_positives_indices = \
-                    match_proposals_with_targets(self, anchors, target)
+                    match_proposals_with_targets(self, proposals, target)
                 anchors_positives = anchors[positives_mask]
                 batch_anchors_positives.append(anchors_positives)
 
@@ -407,6 +409,7 @@ class LaneATTHead(nn.Module):
                 cls_loss += focal_loss(cls_pred, cls_target).sum()
                 continue
 
+            lst_positives.append(positives.clone())
             # Get classification targets
             all_proposals = torch.cat([positives, negatives], 0)
             # cls_target = proposals.new_zeros(num_positives + num_negatives).long()
@@ -415,13 +418,13 @@ class LaneATTHead(nn.Module):
             cls_pred = all_proposals[:, :self.num_category]
             with torch.no_grad():
                 target_positives = target[target_positives_indices]
-                cls_target = proposals.new_zeros(num_positives + num_negatives, self.num_category).long()
+                cls_target = proposals.new_zeros(num_positives + num_negatives, self.num_category).float()
                 cls_target[:num_positives, :] = target_positives[:, :self.num_category]
                 cls_target[num_positives:, 0] = 0
             # print("cls_pred: ", cls_pred)
             # print("cls_target: ", cls_target)
-            log_prob = F.log_softmax(cls_pred, dim=-1)
-            cls_loss = -torch.sum(log_prob * cls_target) / (num_positives + num_negatives)
+            # log_prob = F.log_softmax(cls_pred, dim=-1)
+            cls_loss += binary_cross_entropy_loss(torch.sigmoid(cls_pred),cls_target)#-torch.sum(log_prob * cls_target) / (num_positives + num_negatives)
 
             # Regression targets
             # reg_pred = positives[:, 4:]
@@ -480,6 +483,9 @@ class LaneATTHead(nn.Module):
             reg_vis_loss += binary_cross_entropy_loss(reg_vis_pred, reg_vis_target)
             # cls_loss += focal_loss(cls_pred, cls_target).sum() / num_positives
 
+            if reg_loss>1000:
+                error_cnt=cnt
+
             if reg_loss > 1e7:
                 torch.set_printoptions(edgeitems=20)
                 # print("reg_target: \n", reg_target)
@@ -497,7 +503,7 @@ class LaneATTHead(nn.Module):
         loss = cls_loss_weight * cls_loss + reg_loss + reg_vis_loss_weight * reg_vis_loss
         return loss, {'cls_loss': cls_loss, 'reg_loss': reg_loss,
                       'vis_loss': reg_vis_loss, 'batch_positives': total_positives,
-                      'anchors_positives': batch_anchors_positives}
+                      'anchors_positives': batch_anchors_positives}, error_cnt, lst_positives
 
     def cut_anchor_features(self, features):
         # definitions
@@ -695,19 +701,20 @@ class LaneATTHead(nn.Module):
             # extend its proposal until the x is outside the image
             mask = ~((((lane_xs[:start] >= 0.) &
                        (lane_xs[:start] <= 1.)).cpu().numpy()[::-1].cumprod()[::-1]).astype(np.bool))
+            # if end <71:
             lane_xs[end + 1:] = -2
             lane_xs[:start][mask] = -2
-            lane_ys = self.anchor_ys[lane_xs >= 0]
+            lane_ys = self.anchor_ys[lane_xs >= 0] #* self.img_h
             lane_xs = lane_xs[lane_xs >= 0]
             lane_xs = lane_xs.flip(0).double()
             lane_ys = lane_ys.flip(0)
             if len(lane_xs) <= 1:
                 continue
-            points = torch.stack((lane_xs.reshape(-1, 1), lane_ys.reshape(-1, 1)), dim=1).squeeze(2)
+            points = torch.stack((lane_xs.reshape(-1, 1)*self.img_w, lane_ys.reshape(-1, 1)*self.img_w), dim=1).squeeze(2)
             points = points.data.cpu().numpy()
             if np.shape(points)[0] < 2:
                 continue
-            pred_cat = torch.argmax(lane[1:self.num_category])
+            # pred_cat = torch.argmax(lane[1:self.num_category])
             lane = Lane(points=points,
                         metadata={
                             # 'start_x': lane[3],
@@ -715,8 +722,8 @@ class LaneATTHead(nn.Module):
                             # 'conf': lane[1]
                             'start_x': lane[self.num_category+1].item(),
                             'start_y': lane[self.num_category].item(),
-                            'pred_cat': pred_cat.item() + 1,
-                            'conf': lane[pred_cat.item()]
+                            # 'pred_cat': pred_cat.item() + 1,
+                            # 'conf': lane[pred_cat.item()]
                         })
             lanes.append(lane)
         return lanes
@@ -724,11 +731,11 @@ class LaneATTHead(nn.Module):
     def decode(self, proposals_list, vis_thres, as_lanes=False):
         softmax = nn.Softmax(dim=1)
         decoded = []
-        for proposals, _, _, _ in proposals_list:
+        for proposals in proposals_list:
             # proposals[:, :2] = softmax(proposals[:, :2])
             # proposals[:, :self.num_category] = softmax(proposals[:, :self.num_category])
-            a = softmax(proposals[:, :self.num_category])
-            proposals = torch.cat((a, proposals[:, self.num_category: ]), dim=1)
+            # a = softmax(proposals[:, :self.num_category])
+            # proposals = torch.cat((a, proposals[:, self.num_category: ]), dim=1)
             # proposals[:, 4] = torch.round(proposals[:, 4])
             if proposals.shape[0] == 0:
                 decoded.append([])

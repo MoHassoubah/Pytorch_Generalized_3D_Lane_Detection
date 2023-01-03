@@ -17,6 +17,7 @@ import warnings
 import torchvision.transforms.functional as F
 from tools.utils import *
 from scipy.interpolate import UnivariateSpline
+from networks.libs.lane import Lane
 warnings.simplefilter('ignore', np.RankWarning)
 matplotlib.use('Agg')
 
@@ -1064,6 +1065,39 @@ class LaneDataset(Dataset):
                     im_ipm = cv2.line(im_ipm, (x_ipm[k - 1], y_ipm[k - 1]),
                                     (x_ipm[k], y_ipm[k]), color, width)
         return im_ipm
+
+    def label_to_lanes(self, label):
+        lanes = []
+        #num_category = 1
+        # print("label.size in label_to_lanes: ", np.shape(label))
+        for l in label:
+            # if l[1] == 0:
+            if l[0] != 1:
+                continue
+            # xs = l[5:] / self.w_net
+            xs = l[1+2:1+2+self.n_offsets] #/ self.w_net
+            ys = self.offsets_ys #/ self.h_net
+            # start = int(round(l[2] * self.n_strips))
+            start = int(round(l[1] * self.n_strips))
+            # length = int(round(l[4]))
+            l_vis = l[1+2+self.n_offsets:]
+            idx = int(np.nonzero(l_vis == 1)[0][-1])
+            start_vis_idx = int(np.nonzero(l_vis == 1)[0][0])
+            start = start_vis_idx
+            length = idx - start + 1
+            # idx = self.num_category+2+2*self.n_offsets - 1
+            # while l[idx] < 1e-5 and idx > self.num_category+2+self.n_offsets:
+            #     idx -= 1
+            # length = int(idx - (self.num_category+2+self.n_offsets) - start + 1)
+            xs = xs[start:start + length][::-1]
+            ys = ys[start:start + length][::-1]
+            xs = xs.reshape(-1, 1)
+            ys = ys.reshape(-1, 1)
+            points = np.hstack((xs, ys))
+            if np.shape(points)[0] < 2:
+                continue
+            lanes.append(Lane(points=points))
+        return lanes
 
 
 def make_lane_y_mono_inc(lane):

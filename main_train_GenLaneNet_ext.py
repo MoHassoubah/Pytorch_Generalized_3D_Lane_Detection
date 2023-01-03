@@ -348,8 +348,6 @@ def train_net():
             # print('lr is set to {}'.format(lr))
             
         np.random.seed()
-        if epoch > args.seg_start_epoch:
-            args.loss_seg_weight = 10.0
 
         # Define container objects to keep track of multiple losses/metrics
         batch_time = AverageMeter()
@@ -427,7 +425,7 @@ def train_net():
             loss3d,loss_3d_dict = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
 
             # Add laneatt loss
-            loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
+            loss_att, loss_att_dict,error_cnt, positives = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
                                                                     cls_loss_weight=args.cls_loss_weight,
                                                                     reg_vis_loss_weight=args.reg_vis_loss_weight)
             # segmentation loss
@@ -459,6 +457,7 @@ def train_net():
             aug_mat = aug_mat.data.cpu().numpy()
             output_net = output_net.data.cpu().numpy()
             gt = gt.data.cpu().numpy()
+            gt_laneline_img = gt_laneline_img.data.cpu().numpy()
 
             # unormalize lane outputs
             num_el = input.size(0)
@@ -478,6 +477,36 @@ def train_net():
                       'Loss {loss.val:.8f} ({loss.avg:.8f})'.format(
                        epoch+1, i+1, len(train_loader), batch_time=batch_time,
                        data_time=data_time, loss=lossestot))
+
+            ##################################
+            with torch.no_grad():
+                # error_cnt = 0
+                if error_cnt >=0:
+                    gt_2d = []
+                    for j in range(num_el):
+                        gt_2d.append(train_dataset.label_to_lanes(gt_laneline_img[j]))
+                    gt_decoded_2d = []
+                    for p in gt_2d:
+                        lanes = []
+                        for l in p:
+                            lanes.append(l.points)
+                        gt_decoded_2d.append(lanes)
+                    # Apply nms 
+                    prediction_2d = model.laneatt_head.decode(positives, 0.1, as_lanes=True)
+
+                    pred_decoded_2d = []
+                    pred_decoded_2d_cate = []
+                    for p in prediction_2d:
+                        lanes = []
+                        cate = []
+                        for l in p:
+                            lanes.append(l.points)
+                            # cate.append(l.metadata['pred_cat'])
+                        pred_decoded_2d.append(lanes)
+                        # pred_decoded_2d_cate.append(cate)
+                    vs_saver.show_2d_error_img(epoch,i,input,error_cnt=error_cnt,laneatt_gt=gt_decoded_2d, laneatt_pred=pred_decoded_2d)
+                    
+            ##################################
 
             # Plot curves in two views
             if (i + 1) % args.save_freq == 0:
@@ -585,7 +614,7 @@ def validate(loader, dataset, model,bceloss, criterion, vs_saver, val_gt_file, e
                 loss3d,loss_3d_dict = criterion(output_net, gt, pred_hcam, gt_hcam, pred_pitch, gt_pitch)
 
                 # Add laneatt loss
-                loss_att, loss_att_dict = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
+                loss_att, loss_att_dict,error_cnt, positives  = model.laneatt_head.loss(laneatt_proposals_list, gt_laneline_img,
                                                                         cls_loss_weight=args.cls_loss_weight,
                                                                         reg_vis_loss_weight=args.reg_vis_loss_weight)
                 # segmentation loss

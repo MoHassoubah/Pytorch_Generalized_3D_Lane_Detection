@@ -239,7 +239,8 @@ def sim3d_config(args):
     args._2d_reg_loss_weight = 0.0 # -4.6052
     args._seg_loss_weight = 0.0 # -2.3026
     args.num_category = 1
-    args.loss_seg_weight = 0.0
+    args.loss_seg_weight = 1
+    args.loss_att_weight = 1
 
 
 class Visualizer:
@@ -335,6 +336,29 @@ class Visualizer:
                 for k in range(1, x_2d.shape[0]):
                     img = cv2.line(img, (x_2d[k - 1], y_2d[k - 1]), (x_2d[k], y_2d[k]), color, 2)
         return img
+
+    def draw_on_img_2d_lane_new(self, img, lane2d, color=[0, 0, 1]):
+        """
+        :param img: image in numpy array, each pixel in [0, 1] range
+        :param lane_anchor: lane anchor in N X C numpy ndarray, dimension in agree with dataloader
+        :param P_g2im: projection from ground 3D coordinates to image 2D coordinates
+        :param draw_type: 'laneline' or 'centerline' deciding which to draw
+        :param color: [r, g, b] color for line,  each range in [0, 1]
+        :return:
+        """
+        img = img.copy() 
+        for j in range(len(lane2d)):
+            # draw laneline
+            x_2d = lane2d[j][:,0]
+            y_2d = lane2d[j][:,1]
+            x_2d = x_2d.astype(np.int)
+            y_2d = y_2d.astype(np.int)
+            for k in range(1, x_2d.shape[0]):
+                img = cv2.line(img, (x_2d[k - 1], y_2d[k - 1]), (x_2d[k], y_2d[k]), color, 2)
+                    
+
+        return img
+
 
     def draw_on_img_new(self, img, lane_anchor, P_g2im, draw_type='laneline', color=[0, 0, 1]):
         """
@@ -731,6 +755,30 @@ class Visualizer:
                                                                                            epoch, batch_i, idx[i]))
             plt.clf()
             plt.close(fig)
+
+    def show_2d_error_img(self, epoch,batch_i,images, aug_mat=np.identity(3, dtype=np.float),error_cnt=-1,laneatt_gt=None, laneatt_pred=None):
+        # if not dataset.data_aug:
+        #     aug_mat = np.repeat(np.expand_dims(aug_mat, axis=0), idx.shape[0], axis=0)
+
+        # for i in range(idx.shape[0]):
+            # during training, only visualize the first sample of this batch
+            
+        im = images.permute(0, 2, 3, 1).data.cpu().numpy()[error_cnt]
+        # the vgg_std and vgg_mean are for images in [0, 1] range
+        im = im * np.array(self.vgg_std)
+        im = im + np.array(self.vgg_mean)
+        im = np.clip(im, 0, 1)
+        # im = im.astype(np.uint8).copy() 
+        im = self.draw_on_img_2d_lane_new(im, laneatt_gt[error_cnt], color=[0, 0, 1])
+        
+        im = self.draw_on_img_2d_lane_new(im, laneatt_pred[error_cnt], color=[1, 0, 0])
+
+        fig = plt.figure()
+        plt.imshow(im)
+        
+        # fig.savefig(self.save_path + '/example/' + self.vis_folder + '/shitt')
+        fig.savefig(self.save_path + '/example/'+self.vis_folder+'/epoch-{}_batch-{}_idx-{}_shitt'.format(
+                                                                                           epoch, batch_i, error_cnt))
 
     def save_result_new(self, dataset, train_or_val, epoch, batch_i, idx, images, gt, pred, pred_cam_pitch, pred_cam_height, aug_mat=np.identity(3, dtype=np.float), evaluate=False):
         if not dataset.data_aug:
