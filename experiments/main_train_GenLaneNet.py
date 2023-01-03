@@ -110,7 +110,7 @@ def train_net():
     scheduler = define_scheduler(optimizer, args)
 
     # Define loss criteria
-    criterion = Laneline_loss_3D(train_dataset.num_types, train_dataset.anchor_dim, args.pred_cam)
+    criterion = Laneline_loss_3D(train_dataset.num_types, train_dataset.anchor_dim, args.pred_cam, args.no_cuda)
 
     if not args.no_cuda:
         criterion = criterion.cuda()

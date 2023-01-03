@@ -25,7 +25,7 @@ from dataloader.Load_Data_3DLane import *
 from networks.Loss_crit import Laneline_loss_3D
 from networks import LaneNet3D
 from tools.utils import *
-from tools import eval_lane_tusimple, eval_3D_lane
+from tools import eval_3D_lane#eval_lane_tusimple, eval_3D_lane
 
 
 def train_net():
@@ -92,7 +92,8 @@ def train_net():
     scheduler = define_scheduler(optimizer, args)
 
     # Define loss criteria
-    criterion = Laneline_loss_3D(train_dataset.num_types, train_dataset.anchor_dim, args.pred_cam)
+    criterion = Laneline_loss_3D(args.batch_size,train_dataset.num_types, train_dataset.anchor_dim, args.pred_cam, 
+    train_dataset.anchor_x_steps, train_dataset.anchor_y_steps,train_dataset._x_off_std, train_dataset._z_std)
 
     if not args.no_cuda:
         criterion = criterion.cuda()

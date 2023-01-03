@@ -20,11 +20,122 @@ class Laneline_loss_3D(nn.Module):
     loss2: sum of geometric distance betwen 3D lane anchor points in X and Z offsets
     loss3: error in estimating pitch and camera heights
     """
-    def __init__(self, num_types, anchor_dim, pred_cam):
+    def __init__(self, batch_size,num_types, anchor_dim, pred_cam, anchor_x_steps, anchor_y_steps,x_off_std, z_std, no_cuda=False):
         super(Laneline_loss_3D, self).__init__()
         self.num_types = num_types
         self.anchor_dim = anchor_dim
         self.pred_cam = pred_cam
+        self.num_x_steps = anchor_x_steps.shape[0]
+        self.num_y_steps = anchor_y_steps.shape[0]
+        self.batch_size = batch_size
+
+        # prepare broadcast anchor_x_tensor, anchor_y_tensor, std_X, std_Y, std_Z
+        tmp_zeros = torch.zeros(self.batch_size, self.num_x_steps, self.num_types, self.num_y_steps)
+        self.x_off_std = torch.tensor(x_off_std.astype(np.float32)).reshape(1, 1, 1, self.num_y_steps) + tmp_zeros
+        
+        self.z_std = torch.tensor(z_std.astype(np.float32)).reshape(1, 1, 1, self.num_y_steps) + tmp_zeros
+        self.anchor_x_tensor = torch.tensor(anchor_x_steps.astype(np.float32)).reshape(1, self.num_x_steps, 1, 1) + tmp_zeros
+        self.anchor_y_tensor = torch.tensor(anchor_y_steps.astype(np.float32)).reshape(1, 1, 1, self.num_y_steps) + tmp_zeros
+        self.anchor_x_tensor = self.anchor_x_tensor/self.x_off_std
+        
+        if not no_cuda:
+            self.x_off_std = self.x_off_std.cuda(0)
+            self.z_std = self.z_std.cuda(0)
+            self.anchor_x_tensor = self.anchor_x_tensor.cuda(0)
+            self.anchor_y_tensor = self.anchor_y_tensor.cuda(0)
+
+
+    def calParrallelismLoss(self, pred_Xoff, pred_Z, gt_class):
+
+
+        parrallelism_loss = torch.tensor(0)
+        un_normPred_X = (pred_Xoff + self.anchor_x_tensor)*self.x_off_std
+        un_normPred_Y = self.anchor_y_tensor
+        un_normPred_Z = pred_Z*self.z_std
+        for typ in range(3):
+            # gt_class[:,:,0] is batch_size x num_anchors x 1
+            idx_non_zero_anchors = torch.nonzero(gt_class[:,:,typ]) #t
+            # ######print('idx_non_zero_anchors', idx_non_zero_anchors.shape)
+            _, counts = torch.unique_consecutive(idx_non_zero_anchors[:,0], return_counts=True)
+            idx_imgs_val_lanes_greater_than_2 = torch.nonzero(counts>=2)#z
+            
+            # x_values = pred_Xoff[:,:,typ,:] + self.anchor_x_tensor[:,:,typ,:]
+            # x_values = x_values * self.x_off_std[:,:,typ,:]
+            x_values = un_normPred_X[:,:,typ,:]
+            # y_values = pred_Yoff[:,:,typ,:] + self.anchor_y_tensor[:,:,typ,:]
+            # y_values = y_values * self.y_off_std[:,:,typ,:]
+            y_values = un_normPred_Y[:,:,typ,:]
+            # z_valus = pred_Z[:,:,typ,:] * self.z_std[:,:,typ,:]
+            z_valus = un_normPred_Z[:,:,typ,:]
+            num_dims = len(x_values.shape)
+            # batch_size x num_anchors x num_point (3 y steps) x 3 (x,y,z)
+            x_y_z_vect = torch.cat((torch.cat((x_values.unsqueeze(num_dims),y_values.unsqueeze(num_dims))
+            ,dim=num_dims),  z_valus.unsqueeze(num_dims)),dim=num_dims)
+            # ######print('x_y_z_vect=', x_y_z_vect.shape)
+
+            # batch_size x num_anchors x num_line_vect (num_point-1)
+            # typ_gt_visibility = gt_visibility[:,:,typ,:]
+            # img_gt_visibility = img_gt_visibility[idx_imgs_val_lanes_greater_than_2].squeeze(1)
+
+            for z_i in idx_imgs_val_lanes_greater_than_2:
+                val_anch_idx = idx_non_zero_anchors[:,1][torch.nonzero(idx_non_zero_anchors[:,0]==z_i)]
+                
+                # ######print('val_anch_idx=', val_anch_idx.shape)
+                # get the line vectors of each lane anchor
+                # num_anchors x num_line_vect (num_point-1) x 3 (x,y,z)
+                img_x_y_z_vect = x_y_z_vect[z_i,val_anch_idx,:,:].squeeze(1)
+                # ######print('x_y_z_vect consider the current image=', img_x_y_z_vect.shape)
+                # num_valid_anchors x num points
+                # img_gt_visibility = typ_gt_visibility[z_i,val_anch_idx,:].squeeze(1)
+                # ######print('img_gt_visibility consider the current imge=', img_gt_visibility.shape)
+
+                lane_line_vect = img_x_y_z_vect[:,1:self.num_y_steps,:] - \
+                        img_x_y_z_vect[:,0:self.num_y_steps-1,:]
+                # ######print('lane_line_vect=', lane_line_vect.shape)
+                        
+                lane_line_vect = lane_line_vect / (torch.norm(lane_line_vect,dim=-1).unsqueeze(2) + 1e-07)
+                
+                # valid_line_vect = img_gt_visibility[:,0:-1]*img_gt_visibility[:,1:]
+                # ######print('vali_line_vect sum 1', valid_line_vect.sum())
+                # ######print('valid_linde_vect=', valid_line_vect.shape)
+
+                # ######print('valid_line_vect before ', valid_line_vect)
+
+                # valid_line_vect = valid_line_vect[1:,:]*valid_line_vect[0:-1,:]
+                
+                # ######print('valid_line_vect sum 2', valid_line_vect.sum())
+                # ######print('valid_line_vect after neigh anchor op=', valid_line_vect.shape)
+
+                #dot product of each anchor line vector with the neigbouring anchor next to it
+                # num_anchors-1 x num_line_vect (dot product value for each vect segment)
+                # each one of num_anchors-1 x num_line_vect is a dot product between matching 
+                # segements at y-coords pairs
+                neighbor_anchor_dot_prod = lane_line_vect[1:,:]*lane_line_vect[0:-1,:]
+                neighbor_anchor_dot_prod = neighbor_anchor_dot_prod.sum(dim=-1)
+                # ######print('neighbor_anchor_dot_prod', neighbor_anchor_dot_prod.shape)
+
+                parrallelism_out = torch.ones_like(neighbor_anchor_dot_prod) - neighbor_anchor_dot_prod
+                # ######print('parrallelism_out sum 1', parrallelism_out.sum())
+
+                parrallelism_out = parrallelism_out #* valid_line_vect
+                # ######('parrallelism_out sum 2', parrallelism_out.sum())
+
+                # batch_size x num_anchors-1 x 1
+                # valid_anchors = gt_class[:,1:,0]*gt_class[:,0:-1,0]
+                # print('gt_class sum', gt_class[:,:,0].sum())
+                # ######print('valid_anchors sum', valid_anchors.sum())
+                # ######print('valid_anchors', valid_anchors.shape)
+
+                # batch_size x num_anchors-1 x num_line_vect (dot product value for each vect segment)
+                # parrallelism_out = parrallelism_out * valid_anchors
+                # ######print('parrallelism_out sum 3', parrallelism_out.sum())
+                # the norm measure for every anchor the degree of parallelism
+
+                parrallelism_loss =  parrallelism_loss + \
+                    torch.sum( torch.norm(parrallelism_out, p=1, dim=-1))
+                # ######print('parrallelism_loss=', parrallelism_loss)
+        # print('return parrallelism_loss=', parrallelism_loss)
+        return parrallelism_loss
 
     def forward(self, pred_3D_lanes, gt_3D_lanes, pred_hcam, gt_hcam, pred_pitch, gt_pitch):
         """
@@ -52,10 +163,17 @@ class Laneline_loss_3D(nn.Module):
                            torch.log(torch.ones_like(pred_class)-pred_class + torch.tensor(1e-9)))
         # applying L1 norm does not need to separate X and Z
         loss2 = torch.sum(torch.norm(gt_class*(pred_anchors-gt_anchors), p=1, dim=3))
+        
+        pred_Xoff = pred_anchors[:, :, :, :self.num_y_steps]
+        pred_Z = pred_anchors[:, :, :, self.num_y_steps:2*self.num_y_steps]
+        
+        loss5 = self.calParrallelismLoss(pred_Xoff,  pred_Z, gt_class)
+
         if not self.pred_cam:
-            return loss1+loss2
+            print('return parrallelism_loss=', loss5)
+            return loss1+loss2+loss5
         loss3 = torch.sum(torch.abs(gt_pitch-pred_pitch))+torch.sum(torch.abs(gt_hcam-pred_hcam))
-        return loss1+loss2+loss3
+        return loss1+loss2+loss3 + loss5
 
 
 class Laneline_loss_gflat(nn.Module):
