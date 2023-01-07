@@ -13,7 +13,7 @@ from tqdm import tqdm
 from dataloader.Load_Data_3DLane import *
 from networks import LaneNet3D
 from tools.utils import *
-from tools import eval_lane_tusimple, eval_3D_lane
+from tools import eval_3D_lane#eval_lane_tusimple, 
 
 
 def visualize_features(args, vis_folder, im, idx, x1_feat, x2_feat, x3_feat, x4_feat,

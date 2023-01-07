@@ -121,7 +121,7 @@ def train_net():
 
     # Logging setup
     best_epoch = 0
-    lowest_loss = np.inf
+    lowest_loss =0# np.inf
     log_file_name = 'log_train_start_0.txt'
 
     # Tensorboard writer
@@ -302,7 +302,7 @@ def train_net():
             writer.add_scalars('3D-Lane-Loss', {'Validation': losses_valid}, epoch)
             writer.add_scalars('Evaluation', {'laneline F-measure': eval_stats[0]}, epoch)
             writer.add_scalars('Evaluation', {'centerline F-measure': eval_stats[7]}, epoch)
-        total_score = losses_valid#losses.avg
+        total_score = eval_stats[0]#losses_valid#losses.avg
 
         # Adjust learning_rate if loss plateaued
         if args.lr_policy == 'plateau':
@@ -315,7 +315,7 @@ def train_net():
             f.write(str(epoch))
         # Save model
         to_save = False
-        if total_score < lowest_loss:
+        if total_score > lowest_loss:
             to_save = True
             best_epoch = epoch+1
             lowest_loss = total_score
@@ -482,7 +482,7 @@ if __name__ == '__main__':
     args.mod = 'Gen_LaneNet_ext'
     args.y_ref = 5  # new anchor prefer closer range gt assign
     global crit_string
-    crit_string = 'loss_gflat'
+    crit_string = 'loss_gflat_3D'
 
     # for the case only running evaluation
     args.evaluate = True

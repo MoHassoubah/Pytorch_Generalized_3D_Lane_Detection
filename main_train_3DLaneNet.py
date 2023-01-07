@@ -113,27 +113,27 @@ def train_net():
 
     # Train, evaluate or resume
     args.resume = first_run(args.save_path)
-    # if args.resume and not args.test_mode and not args.evaluate:
-        # path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
-            # int(args.resume)))
-        # if os.path.isfile(path):
-            # log_file_name = 'log_train_start_{}.txt'.format(args.resume)
-            # # Redirect stdout
-            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            # print("=> loading checkpoint '{}'".format(args.resume))
-            # checkpoint = torch.load(path)
-            # args.start_epoch = checkpoint['epoch']
-            # lowest_loss = checkpoint['loss']
-            # best_epoch = checkpoint['best epoch']
-            # model.load_state_dict(checkpoint['state_dict'])
-            # optimizer.load_state_dict(checkpoint['optimizer'])
-            # print("=> loaded checkpoint '{}' (epoch {})"
-                  # .format(args.resume, checkpoint['epoch']))
-        # else:
-            # log_file_name = 'log_train_start_0.txt'
-            # # Redirect stdout
-            # sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
-            # print("=> no checkpoint found at '{}'".format(path))
+    if args.resume and not args.test_mode :#and not args.evaluate:
+        path = os.path.join(args.save_path, 'checkpoint_model_epoch_{}.pth.tar'.format(
+            int(args.resume)))
+        if os.path.isfile(path):
+            log_file_name = 'log_train_start_{}.txt'.format(args.resume)
+            # Redirect stdout
+            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(path)
+            args.start_epoch = checkpoint['epoch']
+            lowest_loss = checkpoint['loss']
+            best_epoch = checkpoint['best epoch']
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+        else:
+            log_file_name = 'log_train_start_0.txt'
+            # Redirect stdout
+            sys.stdout = Logger(os.path.join(args.save_path, log_file_name))
+            print("=> no checkpoint found at '{}'".format(path))
 
     # # Only evaluate
     # elif args.evaluate:
