@@ -63,7 +63,7 @@ class LaneEval(object):
         self.dist_th = 1.5
         self.ratio_th = 0.75
         self.close_range = 40
-        self.very_close_range = 20
+        self.very_close_range = 40
 
     def bench(self, pred_lanes, gt_lanes, gt_visibility, raw_file, gt_cam_height, gt_cam_pitch, vis, ax1, ax2):
         """
@@ -454,20 +454,20 @@ class LaneEval(object):
         P_lane = np.sum(laneline_stats[:, 1]) / (np.sum(laneline_stats[:, 3]) + 1e-6)
         F_lane = 2 * R_lane * P_lane / (R_lane + P_lane + 1e-6)
         x_error_very_close_avg = np.average(laneline_x_error_very_close)
-        x_error_close_avg = np.average(laneline_x_error_close)
+        # x_error_close_avg = np.average(laneline_x_error_close)
         x_error_far_avg = np.average(laneline_x_error_far)
         z_error_very_close_avg = np.average(laneline_z_error_very_close)
-        z_error_close_avg = np.average(laneline_z_error_close)
+        # z_error_close_avg = np.average(laneline_z_error_close)
         z_error_far_avg = np.average(laneline_z_error_far)
 
         output_stats.append(F_lane)
         output_stats.append(R_lane)
         output_stats.append(P_lane)
         output_stats.append(x_error_very_close_avg)
-        output_stats.append(x_error_close_avg)
+        # output_stats.append(x_error_close_avg)
         output_stats.append(x_error_far_avg)
         output_stats.append(z_error_very_close_avg)
-        output_stats.append(z_error_close_avg)
+        # output_stats.append(z_error_close_avg)
         output_stats.append(z_error_far_avg)
 
         if not self.no_centerline:
@@ -483,20 +483,20 @@ class LaneEval(object):
             P_lane = np.sum(centerline_stats[:, 1]) / (np.sum(centerline_stats[:, 3]) + 1e-6)
             F_lane = 2 * R_lane * P_lane / (R_lane + P_lane + 1e-6)
             x_error_very_close_avg = np.average(centerline_x_error_very_close)
-            x_error_close_avg = np.average(centerline_x_error_close)
+            # x_error_close_avg = np.average(centerline_x_error_close)
             x_error_far_avg = np.average(centerline_x_error_far)
             z_error_very_close_avg = np.average(centerline_z_error_very_close)
-            z_error_close_avg = np.average(centerline_z_error_close)
+            # z_error_close_avg = np.average(centerline_z_error_close)
             z_error_far_avg = np.average(centerline_z_error_far)
 
             output_stats.append(F_lane)
             output_stats.append(R_lane)
             output_stats.append(P_lane)
             output_stats.append(x_error_very_close_avg)
-            output_stats.append(x_error_close_avg)
+            # output_stats.append(x_error_close_avg)
             output_stats.append(x_error_far_avg)
             output_stats.append(z_error_very_close_avg)
-            output_stats.append(z_error_close_avg)
+            # output_stats.append(z_error_close_avg)
             output_stats.append(z_error_far_avg)
 
         return output_stats

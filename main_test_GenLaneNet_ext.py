@@ -123,24 +123,26 @@ def deploy(args, loader, dataset, model_seg, model_geo, vs_saver, test_gt_file, 
         # evaluate at the point with max F-measure. Additional eval of position error.
         eval_stats = evaluator.bench_one_submit(lane_pred_file, test_gt_file)#, prob_th=max_f_prob)
 
-        print("Metrics: AP, F-score, x error (Vclose), x error (close), x error (far), z error (Vclose), z error (close), z error (far)")
-        # print(
-            # "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats_pr['laneline_AP'], eval_stats[0],
-                                                                         # eval_stats[3], eval_stats[4],
-                                                                         # eval_stats[5], eval_stats[6]))
-        # print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats_pr['centerline_AP'], eval_stats[7],
-                                                                             # eval_stats[10], eval_stats[11],
-                                                                             # eval_stats[12], eval_stats[13]))
-                                                                             
+        # print("Metrics: AP, F-score, x error (Vclose), x error (close), x error (far), z error (Vclose), z error (close), z error (far)")
+        print("Metrics: AP, F-score, x error (close), x error (far), z error (close), z error (far)")
+        
         print(
-            "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(  eval_stats[2], eval_stats[0],
+            "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats[2], eval_stats[0],
                                                                          eval_stats[3], eval_stats[4],
-                                                                         eval_stats[5], eval_stats[6],
-                                                                         eval_stats[7], eval_stats[8]))
-        print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format( eval_stats[11], eval_stats[9],
-                                                                             eval_stats[12], eval_stats[13],
-                                                                             eval_stats[14], eval_stats[15],
-                                                                             eval_stats[16], eval_stats[17]))
+                                                                         eval_stats[5], eval_stats[6]))
+        print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(eval_stats[9], eval_stats[7],
+                                                                             eval_stats[10], eval_stats[11],
+                                                                             eval_stats[12], eval_stats[13]))
+                                                                             
+        # print(
+        #     "Laneline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format(  eval_stats[2], eval_stats[0],
+        #                                                                  eval_stats[3], eval_stats[4],
+        #                                                                  eval_stats[5], eval_stats[6],
+        #                                                                  eval_stats[7], eval_stats[8]))
+        # print("Centerline:  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}  {:.3}".format( eval_stats[11], eval_stats[9],
+        #                                                                      eval_stats[12], eval_stats[13],
+        #                                                                      eval_stats[14], eval_stats[15],
+        #                                                                      eval_stats[16], eval_stats[17]))
 
     return eval_stats
 
@@ -153,7 +155,7 @@ if __name__ == '__main__':
 
     # manual settings
     args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
-    args.dataset_name = 'illus_chg'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
+    args.dataset_name = 'rare_subset'#'illus_chg'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
     args.mod = 'Gen_LaneNet_ext'  # model name
     test_name = 'test'  # test set name
     pretrained_feat_model = 'pretrained/erfnet_model_sim3d.tar'
