@@ -628,7 +628,7 @@ if __name__ == '__main__':
     args.mod = 'Gen_LaneNet_ext'
     args.y_ref = 5  # new anchor prefer closer range gt assign
     global crit_string
-    crit_string = 'loss_gflat' #'loss_gflat_3D'#'loss_gflat'
+    crit_string = 'loss_gflat_3D' #'loss_gflat_3D'#'loss_gflat'
 
     # for the case only running evaluation
     args.evaluate = True#False
