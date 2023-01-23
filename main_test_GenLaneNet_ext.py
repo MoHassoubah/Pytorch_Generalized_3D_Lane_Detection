@@ -129,12 +129,12 @@ if __name__ == '__main__':
 
     # manual settings
     args.dataset_dir = '../media/yuliangguo/DATA1/Datasets/Apollo_Sim_3D_Lane_Release/'  # raw data dir
-    args.dataset_name = 'rare_subset'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
+    args.dataset_name = 'standard'#'illus_chg'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
     args.mod = 'Gen_LaneNet_ext'  # model name
     test_name = 'test'  # test set name
     pretrained_feat_model = 'pretrained/erfnet_model_sim3d.tar'
-    vis = False  # choose to save visualization result
-
+    # vis = False  # choose to save visualization result
+    vis = True  # choose to save visualization result
     # generate relative paths
     args.data_dir = ops.join('data_splits', args.dataset_name)
     args.save_path = os.path.join(ops.join('data_splits', args.dataset_name), args.mod)
@@ -146,6 +146,7 @@ if __name__ == '__main__':
 
     # load configuration for certain dataset
     sim3d_config(args)
+    args.no_centerline = True
     args.y_ref = 5
     # define evaluator
     evaluator = eval_3D_lane.LaneEval(args)
