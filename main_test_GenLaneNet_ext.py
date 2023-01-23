@@ -172,7 +172,7 @@ if __name__ == '__main__':
 
     # load configuration for certain dataset
     sim3d_config(args)
-    args.no_centerline = True
+    # args.no_centerline = True
     args.y_ref = 5
     # define evaluator
     evaluator = eval_3D_lane.LaneEval(args)
