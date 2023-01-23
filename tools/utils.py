@@ -166,7 +166,7 @@ class Visualizer:
         self.save_path = args.save_path
         self.vis_folder = vis_folder
         self.no_3d = args.no_3d
-        self.no_centerline = args.no_centerline
+        self.no_centerline = True#args.no_centerline
         self.vgg_mean = args.vgg_mean
         self.vgg_std = args.vgg_std
         self.ipm_w = args.ipm_w
