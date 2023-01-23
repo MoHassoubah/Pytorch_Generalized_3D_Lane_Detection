@@ -709,8 +709,8 @@ class Visualizer:
                 break
             im = images.permute(0, 2, 3, 1).data.cpu().numpy()[i]
             # the vgg_std and vgg_mean are for images in [0, 1] range
-            im = im * np.array(self.vgg_std)
-            im = im + np.array(self.vgg_mean)
+            # im = im * np.array(self.vgg_std)
+            # im = im + np.array(self.vgg_mean)
             im = np.clip(im, 0, 1)
 
             gt_anchors = gt[i]
@@ -807,12 +807,52 @@ class Visualizer:
                 ax6.set_xlim(-20, 20)
                 ax6.set_ylim(0, 100)
                 ax6.set_zlim(min(bottom, -1), max(top, 1))
+            elif self.no_centerline and not self.no_3d:
+                fig = plt.figure()#(figsize=[15,14])
+                ax = fig.add_gridspec(16, 4)
+                ax1 = fig.add_subplot(ax[0:, 0:-2])#fig.add_subplot(121)
+                ax2 = fig.add_subplot(ax[0:, -2])#fig.add_subplot(122)
+                ax3 = fig.add_subplot(ax[0:, -1],projection='3d')#fig.add_subplot(122)
+                # ax3 = fig.add_subplot(133, projection='3d')
+                # fig = plt.figure()
+                # ax1 = fig.add_subplot(131)
+                # ax2 = fig.add_subplot(132)
+                # ax3 = fig.add_subplot(133, projection='3d')
+                # ax4 = fig.add_subplot(234)
+                # ax5 = fig.add_subplot(235)
+                # ax6 = fig.add_subplot(236, projection='3d')
+                ax1.imshow(im_laneline)
+                ax2.imshow(ipm_laneline,extent=(0,128,0,208))#origin='lower')
+                # ax2.imshow(ipm_laneline)
+                # TODO:use separate gt_cam_height when ready
+                self.draw_3d_curves_new(ax3, gt_anchors, pred_cam_height[i], 'laneline', [0, 0, 1])
+                self.draw_3d_curves_new(ax3, pred_anchors, pred_cam_height[i], 'laneline', [1, 0, 0])
+                ax3.set_xlabel('x axis')
+                ax3.set_ylabel('y axis')
+                ax3.set_zlabel('z axis')
+                bottom, top = ax3.get_zlim()
+                ax3.set_xlim(-20, 20)
+                ax3.set_ylim(0, 100)
+                ax3.set_zlim(min(bottom, -1), max(top, 1))
+                # ax4.imshow(im_centerline)
+                # ax5.imshow(ipm_centerline)
+                # # TODO:use separate gt_cam_height when ready
+                # self.draw_3d_curves_new(ax6, gt_anchors, pred_cam_height[i], 'centerline', [0, 0, 1])
+                # self.draw_3d_curves_new(ax6, pred_anchors, pred_cam_height[i], 'centerline', [1, 0, 0])
+                # ax6.set_xlabel('x axis')
+                # ax6.set_ylabel('y axis')
+                # ax6.set_zlabel('z axis')
+                # bottom, top = ax6.get_zlim()
+                # ax6.set_xlim(-20, 20)
+                # ax6.set_ylim(0, 100)
+                # ax6.set_zlim(min(bottom, -1), max(top, 1))
+
 
             if evaluate:
                 fig.savefig(self.save_path + '/example/' + self.vis_folder + '/infer_{}'.format(idx[i]))
             else:
                 fig.savefig(self.save_path + '/example/{}/epoch-{}_batch-{}_idx-{}'.format(train_or_val,
-                                                                                           epoch, batch_i, idx[i]))
+                                                                                            epoch, batch_i, idx[i]), bbox_inches='tight', pad_inches=0.5)
             plt.clf()
             plt.close(fig)
 
