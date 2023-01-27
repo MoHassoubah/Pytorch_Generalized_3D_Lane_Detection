@@ -80,7 +80,7 @@ def deploy(args, loader, dataset, model_seg, model_geo, vs_saver, test_gt_file, 
                 if vis:
                     # Plot curves in two views
                     vs_saver.save_result_new(dataset, args.vis_folder, epoch, i, idx,
-                                             input, gt, output_geo, pred_pitch, pred_hcam, evaluate=vis)
+                                             input, gt, output_geo, pred_pitch, pred_hcam, evaluate=False)#vis)
 
                 # visualize and write results
                 for j in range(num_el):

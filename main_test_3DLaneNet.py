@@ -156,7 +156,7 @@ def deploy(args, loader, dataset, model, vs_saver, test_gt_file, lane_pred_file,
                 if vis:
                     # Plot curves in two views
                     vs_saver.save_result(dataset, args.vis_folder, epoch, i, idx,
-                                         input, gt, output_net, pred_pitch, pred_hcam, evaluate=vis)
+                                         input, gt, output_net, pred_pitch, pred_hcam, evaluate=False)#vis)
 
                 # write results and evaluate
                 for j in range(num_el):
@@ -218,7 +218,7 @@ if __name__ == '__main__':
     args.dataset_name = 'standard'  # choose a data split 'standard' / 'rare_subset' / 'illus_chg'
     args.mod = '3D_LaneNet'  # model name
     test_name = 'test'  # test set name
-    vis = False  # choose to visualize lanes per image
+    vis = True#False  # choose to visualize lanes per image
     vis_feat = False  # choose to visualize features from selected key layers
 
     # generate relative paths

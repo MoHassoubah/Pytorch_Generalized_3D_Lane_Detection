@@ -540,8 +540,8 @@ def get_loader(transformed_dataset, args):
     sample_idx = sample_idx[0:len(sample_idx)//args.batch_size*args.batch_size]
     data_sampler = torch.utils.data.sampler.SubsetRandomSampler(sample_idx)
     data_loader = DataLoader(transformed_dataset,
-                             batch_size=args.batch_size, sampler=data_sampler,
-                             num_workers=args.nworkers, pin_memory=True)
+                             batch_size=args.batch_size, #sampler=data_sampler,
+                             num_workers=args.nworkers, pin_memory=True, shuffle=False)
 
     return data_loader
 
