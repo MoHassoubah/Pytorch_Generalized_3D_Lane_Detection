@@ -412,9 +412,9 @@ def train_net():
                        data_time=data_time, loss=losses))
 
             # Plot curves in two views
-            if (i + 1) % args.save_freq == 0:
-                vs_saver.save_result_new(train_dataset, 'train', epoch, i, idx,
-                                         input, gt, output_net, pred_pitch, pred_hcam, aug_mat)
+            # if (i + 1) % args.save_freq == 0:
+            #     vs_saver.save_result_new(train_dataset, 'train', epoch, i, idx,
+            #                              input, gt, output_net, pred_pitch, pred_hcam, aug_mat)
 
         losses_valid, eval_stats = validate(valid_loader, valid_dataset, model, criterion, vs_saver, val_gt_file, epoch)
 
@@ -523,9 +523,9 @@ def validate(loader, dataset, model, criterion, vs_saver, val_gt_file, epoch=0):
                                i+1, len(loader), loss=losses))
 
                 # Plot curves in two views
-                if (i + 1) % args.save_freq == 0 or args.evaluate:
-                    vs_saver.save_result_new(dataset, 'valid', epoch, i, idx,
-                                             input, gt, output_net, pred_pitch, pred_hcam, evaluate=False)#args.evaluate)
+                # if (i + 1) % args.save_freq == 0 or args.evaluate:
+                #     vs_saver.save_result_new(dataset, 'valid', epoch, i, idx,
+                #                              input, gt, output_net, pred_pitch, pred_hcam, evaluate=False)#args.evaluate)
 
                 # write results and evaluate
                 for j in range(num_el):

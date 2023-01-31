@@ -246,7 +246,7 @@ class Laneline_loss_gflat_3D(nn.Module):
                 parrallelism_loss =  parrallelism_loss + \
                     torch.sum( torch.norm(parrallelism_out, p=1, dim=-1))
                 # ######print('parrallelism_loss=', parrallelism_loss)
-        print('return parrallelism_loss=', parrallelism_loss)
+        # print('return parrallelism_loss=', parrallelism_loss)
         return parrallelism_loss
 
     def forward(self, pred_3D_lanes, gt_3D_lanes, pred_hcam, gt_hcam, pred_pitch, gt_pitch):
