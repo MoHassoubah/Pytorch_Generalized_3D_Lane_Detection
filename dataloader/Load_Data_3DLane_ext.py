@@ -239,8 +239,10 @@ class LaneDataset(Dataset):
             A = get_rot(rot)
         else:
             A = torch.eye(2)
-            
+
+        # as if b  is the center of the resized cropped image
         b = torch.Tensor([int(self.w_org*resize), int((self.h_org-self.h_crop)*resize)]) / 2
+        #operation over the (0,0)? as if moving the origin to the center?
         b = A.matmul(-b) + b
         post_rot = A.matmul(post_rot)
         post_tran = A.matmul(post_tran) + b
